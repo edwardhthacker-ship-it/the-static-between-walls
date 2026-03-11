@@ -1235,10 +1235,68 @@ flashlight.castShadow = false;
 camera.add(flashlight); camera.add(flashlight.target);
 flashlight.position.set(0.2,-0.1,-0.2);
 flashlight.target.position.set(0,0,-8);
-// Add a subtle ambient fill so flashlight doesn't look flat
-const flashFill = new THREE.PointLight(0xfff0dd, 0.3, 8);
+// Ambient fill so flashlight illuminates nearby area
+const flashFill = new THREE.PointLight(0xfff0dd, 0.5, 10);
 flashFill.position.set(0, 0, -0.5);
 camera.add(flashFill);
+
+// Volumetric light cone — visible beam in the air
+const coneLength = 14;
+const coneRadius = Math.tan(Math.PI/5) * coneLength;
+const coneGeo = new THREE.ConeGeometry(coneRadius, coneLength, 32, 1, true);
+coneGeo.translate(0, -coneLength/2, 0);
+coneGeo.rotateX(Math.PI/2);
+const coneMat = new THREE.ShaderMaterial({
+  transparent: true,
+  depthWrite: false,
+  side: THREE.DoubleSide,
+  uniforms: {
+    color: { value: new THREE.Color(0xfff0dd) },
+    opacity: { value: 0.04 },
+  },
+  vertexShader: `
+    varying vec3 vPos;
+    void main() {
+      vPos = position;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: `
+    uniform vec3 color;
+    uniform float opacity;
+    varying vec3 vPos;
+    void main() {
+      // Fade out toward edges and tip
+      float dist = length(vPos.xy) / (abs(vPos.z) * 0.6 + 0.5);
+      float fade = 1.0 - smoothstep(0.0, 1.0, dist);
+      // Fade along beam length
+      float zFade = smoothstep(0.0, 1.0, -vPos.z / ${coneLength.toFixed(1)});
+      float alpha = fade * (1.0 - zFade * 0.7) * opacity;
+      gl_FragColor = vec4(color, alpha);
+    }
+  `
+});
+const coneMesh = new THREE.Mesh(coneGeo, coneMat);
+coneMesh.position.copy(flashlight.position);
+coneMesh.renderOrder = 999;
+camera.add(coneMesh);
+
+// Dust particles in beam
+const dustCount = 60;
+const dustGeo = new THREE.BufferGeometry();
+const dustPositions = new Float32Array(dustCount * 3);
+const dustSpeeds = [];
+for (let i = 0; i < dustCount; i++) {
+  dustPositions[i*3] = (Math.random() - 0.5) * 2;
+  dustPositions[i*3+1] = (Math.random() - 0.5) * 2;
+  dustPositions[i*3+2] = -Math.random() * 10 - 1;
+  dustSpeeds.push({ x: (Math.random()-0.5)*0.3, y: (Math.random()-0.5)*0.2, z: (Math.random()-0.5)*0.2 });
+}
+dustGeo.setAttribute('position', new THREE.BufferAttribute(dustPositions, 3));
+const dustMat = new THREE.PointsMaterial({ color: 0xfff5ee, size: 0.02, transparent: true, opacity: 0.3, depthWrite: false });
+const dustParticles = new THREE.Points(dustGeo, dustMat);
+camera.add(dustParticles);
+
 scene.add(camera);
 let flashlightOn = true;
 
@@ -1720,7 +1778,9 @@ document.addEventListener('keydown', (e) => {
     case 'KeyD': case 'ArrowRight': moveRight=true; break;
     case 'ShiftLeft': case 'ShiftRight': isSprinting=true; break;
     case 'KeyF':
-      flashlightOn=!flashlightOn; flashlight.visible=flashlightOn; flashFill.visible=flashlightOn;
+      flashlightOn=!flashlightOn;
+      flashlight.visible=flashlightOn; flashFill.visible=flashlightOn;
+      coneMesh.visible=flashlightOn; dustParticles.visible=flashlightOn;
       if(!flashlightOn) showSubtitle("Flashlight off"); break;
     case 'KeyR':
       radioActive=!radioActive;
@@ -2055,6 +2115,25 @@ function animate() {
       if(p.userData.timer<=0){p.userData.active=false;p.material.opacity=0;}
     }
   });
+
+  // ── Flashlight dust particles ──
+  if(flashlightOn) {
+    const pos = dustGeo.attributes.position;
+    for(let i = 0; i < dustCount; i++) {
+      pos.array[i*3] += dustSpeeds[i].x * delta;
+      pos.array[i*3+1] += dustSpeeds[i].y * delta;
+      pos.array[i*3+2] += dustSpeeds[i].z * delta;
+      // Reset if out of beam
+      if(Math.abs(pos.array[i*3]) > 2.5 || Math.abs(pos.array[i*3+1]) > 2.5 || pos.array[i*3+2] > -0.5 || pos.array[i*3+2] < -12) {
+        pos.array[i*3] = (Math.random()-0.5)*1.5;
+        pos.array[i*3+1] = (Math.random()-0.5)*1.5;
+        pos.array[i*3+2] = -Math.random()*8-1;
+      }
+    }
+    pos.needsUpdate = true;
+    // Beam opacity flickers slightly at low sanity
+    coneMat.uniforms.opacity.value = sNorm > 0.3 ? 0.04 : 0.04 + Math.random() * 0.02;
+  }
 
   // ── Water ──
   if(water){water.position.y=0.03+Math.sin(gameTime*0.5)*0.003;water.material.opacity=0.4+Math.sin(gameTime*0.3)*0.1;}
