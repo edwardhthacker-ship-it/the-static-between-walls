@@ -1139,6 +1139,7 @@ const doorwayDefs = [
   { seg: 3, side: 'right', doorZ: -13.5 },
   { seg: 4, side: 'left',  doorZ: -18.5 },
   { seg: 5, side: 'right', doorZ: -23.5 },
+  { seg: 6, side: 'left',  doorZ: -29.5 }, // mystery door
 ];
 const DOOR_GAP_W = 1.15; // doorway width in z (slightly wider than 0.92 door)
 const DOOR_GAP_H = 2.15; // doorway height
@@ -1285,8 +1286,18 @@ addDoorNum(HALL_WIDTH/2+0.01, 2, -13.5, '103', Math.PI/2);
 addDoorNum(-HALL_WIDTH/2-0.01, 2, -18.5, '104', -Math.PI/2);
 addDoorNum(HALL_WIDTH/2+0.01, 2, -23.5, '105', Math.PI/2);
 
+// Mystery door — locked for 3 passes, opens on the 4th
+const mysteryDoorZ = -29.5;
+const mysteryDoor = addDoor(mysteryDoorZ, 'left', false, true); // starts locked
+addDoorNum(-HALL_WIDTH/2-0.01, 2, mysteryDoorZ, '???', -Math.PI/2);
+// Small room behind it (empty, unsettling)
+addWall(-4.5, WH/2, -32, 6, WH, 0.12, wallMatC);
+addWall(-4.5, WH/2, -27, 6, WH, 0.12, wallMatC);
+addWall(-7.5, WH/2, -29.5, 0.12, WH, 5, wallMatC);
+addFloor(-4.5, -29.5, 6, 5, floorMatConcrete); addCeiling(-4.5, -29.5, 6, 5);
+
 // Small lights above each doorway so they're visible
-[{x:1.3,z:-3.5},{x:-1.3,z:-8.5},{x:1.3,z:-13.5},{x:-1.3,z:-18.5},{x:1.3,z:-23.5}].forEach(d => {
+[{x:1.3,z:-3.5},{x:-1.3,z:-8.5},{x:1.3,z:-13.5},{x:-1.3,z:-18.5},{x:1.3,z:-23.5},{x:-1.3,z:-29.5}].forEach(d => {
   const dl = new THREE.PointLight(0xffddaa, 0.8, 5, 2);
   dl.position.set(d.x, 2.3, d.z); scene.add(dl);
 });
@@ -1408,15 +1419,43 @@ let flashlightOn = true;
 // SHADOW ENTITIES
 // ════════════════════════════════════════
 const watcherGroup = new THREE.Group();
-const watcherBodyMat = new THREE.MeshBasicMaterial({color:0x000000,transparent:true,opacity:0});
+// Slightly lighter than environment so it reads as a silhouette, not invisible
+const watcherBodyMat = new THREE.MeshBasicMaterial({color:0x111122,transparent:true,opacity:0});
 const watcherBody = new THREE.Mesh(new THREE.CylinderGeometry(0.15,0.25,1.9,8), watcherBodyMat);
 watcherBody.position.set(0,0.95,0); watcherGroup.add(watcherBody);
-const watcherHeadMat = new THREE.MeshBasicMaterial({color:0x000000,transparent:true,opacity:0});
+const watcherHeadMat = new THREE.MeshBasicMaterial({color:0x111122,transparent:true,opacity:0});
 const watcherHead = new THREE.Mesh(new THREE.SphereGeometry(0.15,8,8), watcherHeadMat);
 watcherHead.position.set(0,2.05,0); watcherGroup.add(watcherHead);
+// Faint glow so watcher is visible against dark backgrounds
+const watcherGlow = new THREE.PointLight(0x1a1a3a, 0.4, 3, 2);
+watcherGlow.position.set(0, 1.5, 0); watcherGroup.add(watcherGlow);
 watcherGroup.position.set(0,0,-30); watcherGroup.visible=false; scene.add(watcherGroup);
 
 let watcherState = 'hidden', watcherTimer = 25+Math.random()*20, watcherOpacity = 0;
+
+// ─── FLEEING ENTITY (The Glimpse) ───
+// Runs away when player looks at it — opposite of the watcher
+const glimpseGroup = new THREE.Group();
+const glimpseMat = new THREE.MeshBasicMaterial({color:0x1a1520,transparent:true,opacity:0});
+const glimpseBody = new THREE.Mesh(new THREE.CylinderGeometry(0.1,0.18,1.6,6), glimpseMat);
+glimpseBody.position.set(0,0.8,0); glimpseGroup.add(glimpseBody);
+const glimpseHead = new THREE.Mesh(new THREE.SphereGeometry(0.12,6,6), glimpseMat);
+glimpseHead.position.set(0,1.75,0); glimpseGroup.add(glimpseHead);
+glimpseGroup.visible = false; scene.add(glimpseGroup);
+let glimpseState = 'hidden', glimpseTimer = 40 + Math.random()*30;
+
+// ─── SCRIPTED SEQUENCES ───
+const scriptedEvents = {
+  // Apt 102: door closes behind player, lights flicker, silence
+  apt102Triggered: false,
+  // Locked door that opens on 4th pass
+  mysteryDoorPasses: 0,
+  mysteryDoorOpen: false,
+  // Rising water in apt 104
+  apt104Triggered: false,
+  apt104WaterRising: false,
+  apt104WaterLevel: 0.03,
+};
 
 // Wall crawler particles
 const crawlerParticles = [];
@@ -2215,6 +2254,145 @@ function animate() {
     watcherBodyMat.opacity=Math.max(0,watcherOpacity);
     watcherHeadMat.opacity=Math.max(0,watcherOpacity);
     if(watcherOpacity<=0){watcherState='hidden';watcherGroup.visible=false;watcherTimer=20+Math.random()*30;}
+  }
+
+  // ── The Glimpse (flees when looked at) ──
+  if (mode.horrorEvents) {
+    if (glimpseState === 'hidden') {
+      glimpseTimer -= delta;
+      if (glimpseTimer <= 0) {
+        glimpseState = 'lurking'; glimpseGroup.visible = true; glimpseMat.opacity = 0;
+        // Place it ahead of the player, at the edge of visibility
+        const ahead = new THREE.Vector3(); camera.getWorldDirection(ahead); ahead.multiplyScalar(8+Math.random()*5);
+        const side = Math.random()>0.5 ? 1 : -1;
+        glimpseGroup.position.set(
+          Math.max(-1.2, Math.min(1.2, camera.position.x + ahead.x + side*1.5)),
+          camera.position.y - 1.65,
+          camera.position.z + ahead.z
+        );
+      }
+    } else if (glimpseState === 'lurking') {
+      glimpseMat.opacity = Math.min(glimpseMat.opacity + delta*0.5, 0.6);
+      const toG = new THREE.Vector3().subVectors(glimpseGroup.position, camera.position).normalize();
+      const look = new THREE.Vector3(); camera.getWorldDirection(look);
+      const dot = look.dot(toG);
+      if (dot > 0.5 && glimpseMat.opacity > 0.2) {
+        // Player sees it — it runs away
+        glimpseState = 'fleeing';
+        playCreak(); // startling sound
+      }
+      // Subtle idle sway
+      glimpseGroup.position.y += Math.sin(gameTime*2)*delta*0.1;
+    } else if (glimpseState === 'fleeing') {
+      // Sprint away from player
+      const away = new THREE.Vector3().subVectors(glimpseGroup.position, camera.position);
+      away.y = 0; away.normalize();
+      glimpseGroup.position.addScaledVector(away, delta*12);
+      glimpseMat.opacity -= delta*1.2;
+      if (glimpseMat.opacity <= 0) {
+        glimpseState = 'hidden'; glimpseGroup.visible = false;
+        glimpseTimer = 30 + Math.random()*40;
+        sanity -= 3; // unsettling
+      }
+    }
+  }
+
+  // ── Scripted: Apt 102 door closes behind you ──
+  if (!scriptedEvents.apt102Triggered && mode.horrorEvents) {
+    const px = camera.position.x, pz = camera.position.z;
+    // Player is inside apt 102 (left side, center -4.5, -9)
+    if (px < -2 && px > -7 && pz > -11.5 && pz < -6.5) {
+      scriptedEvents.apt102Triggered = true;
+      const apt102Door = doorObjects[1]; // second door created (apt 102)
+      // Stage 1: door creaks shut slowly
+      setTimeout(() => {
+        if(apt102Door) { apt102Door.isOpen = false; apt102Door.targetAngle = 0; playCreak(); }
+      }, 2000);
+      // Stage 2: lights flicker violently
+      setTimeout(() => {
+        flickerLights.forEach(fl => {
+          if(fl.light.position.distanceTo(new THREE.Vector3(-4.5, 2.85, -9)) < 4) {
+            const origInt = fl.baseIntensity;
+            fl.light.intensity = 0; fl.glow.material.opacity = 0;
+            setTimeout(() => { fl.light.intensity = origInt*3; fl.glow.material.opacity = 0.3; }, 200);
+            setTimeout(() => { fl.light.intensity = 0; fl.glow.material.opacity = 0; }, 400);
+            setTimeout(() => { fl.light.intensity = origInt*2; fl.glow.material.opacity = 0.2; }, 700);
+            setTimeout(() => { fl.light.intensity = 0; fl.glow.material.opacity = 0; }, 900);
+            setTimeout(() => { fl.light.intensity = origInt; fl.glow.material.opacity = 0.15; }, 1500);
+          }
+        });
+        playStaticBurst(0.3, 0.15);
+      }, 4000);
+      // Stage 3: total silence then a whisper
+      setTimeout(() => { playWhisper(); sanity -= 8; }, 7000);
+      // Stage 4: door slams open again
+      setTimeout(() => {
+        if(apt102Door) { apt102Door.isOpen = true; apt102Door.targetAngle = -Math.PI/2.5; }
+        playDoorSlam(1.5);
+        showSubtitle("...");
+      }, 9000);
+    }
+  }
+
+  // ── Scripted: Rising water in apt 104 ──
+  if (!scriptedEvents.apt104Triggered && mode.horrorEvents && water) {
+    const px = camera.position.x, pz = camera.position.z;
+    if (px < -2 && px > -7 && pz > -21.5 && pz < -16.5) {
+      scriptedEvents.apt104Triggered = true;
+      scriptedEvents.apt104WaterRising = true;
+      playWaterDrip();
+      setTimeout(() => showSubtitle("The water... it's rising."), 3000);
+    }
+  }
+  if (scriptedEvents.apt104WaterRising && water) {
+    scriptedEvents.apt104WaterLevel += delta * 0.08;
+    water.position.y = scriptedEvents.apt104WaterLevel;
+    // Sound gets more urgent as water rises
+    if (scriptedEvents.apt104WaterLevel > 0.3 && Math.random() < 0.02) playWaterDrip();
+    if (scriptedEvents.apt104WaterLevel > 0.5) {
+      // Start affecting sanity
+      const px = camera.position.x, pz = camera.position.z;
+      if (px < -2 && px > -7 && pz > -21.5 && pz < -16.5) {
+        sanity -= delta * 5;
+      }
+    }
+    if (scriptedEvents.apt104WaterLevel > 1.0) {
+      scriptedEvents.apt104WaterRising = false; // cap it
+      water.position.y = 1.0;
+    }
+  }
+
+  // ── Scripted: Mystery door opens on 4th pass ──
+  if (!scriptedEvents.mysteryDoorOpen && mode.horrorEvents) {
+    const pz = camera.position.z;
+    // Player passes z=-29.5 (mystery door location)
+    if (Math.abs(pz - mysteryDoorZ) < 1.5 && Math.abs(camera.position.x) < 2) {
+      if (!scriptedEvents._nearMystery) {
+        scriptedEvents._nearMystery = true;
+        scriptedEvents.mysteryDoorPasses++;
+        if (scriptedEvents.mysteryDoorPasses < 4) {
+          // Tease — different message each time
+          const msgs = [
+            "The door is locked tight.",
+            "Was that door always there?",
+            "You hear breathing from the other side."
+          ];
+          showMessage(msgs[scriptedEvents.mysteryDoorPasses-1] || msgs[2]);
+        } else {
+          // 4th pass — door unlocks and creaks open
+          scriptedEvents.mysteryDoorOpen = true;
+          mysteryDoor.locked = false;
+          mysteryDoor.isOpen = true;
+          mysteryDoor.targetAngle = -Math.PI/4;
+          playCreak();
+          setTimeout(() => playWhisper(), 500);
+          showSubtitle("It's open now.");
+          sanity -= 5;
+        }
+      }
+    } else {
+      scriptedEvents._nearMystery = false;
+    }
   }
 
   // ── Wall crawlers ──
