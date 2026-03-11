@@ -747,7 +747,7 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.shadowMap.enabled = false;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 0.85;
+renderer.toneMappingExposure = 1.0;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 document.body.appendChild(renderer.domElement);
 
@@ -755,6 +755,8 @@ document.body.appendChild(renderer.domElement);
 // (avoids exceeding texture unit limits on constrained GPUs)
 
 const controls = new PointerLockControls(camera, renderer.domElement);
+controls.minPolarAngle = 0.3;  // can't look straight up
+controls.maxPolarAngle = 2.8;  // can't look straight down
 
 // ════════════════════════════════════════
 // TEXTURES
@@ -877,14 +879,16 @@ function createNormalMap() {
 // Share textures to stay under GPU texture unit limit
 const sharedWallTex = createWallTex(42,38,32,true);
 const sharedFloorTex = createFloorTex('tile');
-const wallMatA = new THREE.MeshStandardMaterial({ map: sharedWallTex, roughness: 0.92, side: THREE.DoubleSide });
-const wallMatB = new THREE.MeshStandardMaterial({ map: sharedWallTex, roughness: 0.95, side: THREE.DoubleSide, color: 0xccbbaa });
-const wallMatC = new THREE.MeshStandardMaterial({ map: sharedWallTex, roughness: 0.9, side: THREE.DoubleSide, color: 0xddccbb });
+const sharedNormalMap = createNormalMap();
+const wallMatA = new THREE.MeshStandardMaterial({ map: sharedWallTex, normalMap: sharedNormalMap, normalScale: new THREE.Vector2(0.3,0.3), roughness: 0.92, side: THREE.DoubleSide });
+const wallMatB = new THREE.MeshStandardMaterial({ map: sharedWallTex, normalMap: sharedNormalMap, normalScale: new THREE.Vector2(0.3,0.3), roughness: 0.95, side: THREE.DoubleSide, color: 0xccbbaa });
+const wallMatC = new THREE.MeshStandardMaterial({ map: sharedWallTex, normalMap: sharedNormalMap, normalScale: new THREE.Vector2(0.3,0.3), roughness: 0.9, side: THREE.DoubleSide, color: 0xddccbb });
 const floorMatTile = new THREE.MeshStandardMaterial({ map: sharedFloorTex, roughness: 0.8 });
 const floorMatConcrete = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.95 });
-const floorMatWood = new THREE.MeshStandardMaterial({ color: 0x1e1408, roughness: 0.85 });
-const ceilingMat = new THREE.MeshStandardMaterial({ color: 0x1f1e1c, roughness: 0.9 });
-const doorMat = new THREE.MeshStandardMaterial({ color: 0x5a3a20, roughness: 0.6, metalness: 0.05 });
+const floorMatWood = new THREE.MeshStandardMaterial({ color: 0x2a1c0e, roughness: 0.85, normalMap: sharedNormalMap, normalScale: new THREE.Vector2(0.2,0.2) });
+const ceilTex = createCeilTex();
+const ceilingMat = new THREE.MeshStandardMaterial({ map: ceilTex, roughness: 0.9 });
+const doorMat = new THREE.MeshStandardMaterial({ color: 0x5a3a20, roughness: 0.55, metalness: 0.05, normalMap: sharedNormalMap, normalScale: new THREE.Vector2(0.15,0.15) });
 const metalMat = new THREE.MeshStandardMaterial({ color: 0x3a3a3a, metalness: 0.7, roughness: 0.4 });
 
 // ════════════════════════════════════════
@@ -946,23 +950,58 @@ function addFluorescentLight(x,z,intensity=1.2,color=0xffe8cc) {
   return fl;
 }
 
-function addDoor(x,z,rotY=0,open=false,locked=false) {
+// side: 'right' or 'left' — which hallway wall the door sits in
+// cx, cz: center of the doorway opening in world coordinates
+function addDoor(cz, side, open=false, locked=false) {
+  const DW = 0.92, DH = 2.1;
   const g = new THREE.Group();
-  const panel = new THREE.Mesh(new THREE.BoxGeometry(0.88,2.05,0.06), doorMat);
-  panel.position.set(0.44,1.025,0); panel.castShadow=true; g.add(panel);
-  const handleMat = new THREE.MeshStandardMaterial({color:0xaa9955,metalness:0.9,roughness:0.2});
-  const handle = new THREE.Mesh(new THREE.SphereGeometry(0.025,8,8), handleMat);
-  handle.position.set(0.75,1.0,0.05); g.add(handle);
-  const frameMat = new THREE.MeshStandardMaterial({color:0x302015,roughness:0.7});
-  // Door frame posts as children of the rotated group so they align correctly
-  const frameL = new THREE.Mesh(new THREE.BoxGeometry(0.06,2.15,0.1), frameMat);
-  frameL.position.set(-0.03, 1.075, 0); g.add(frameL);
-  const frameR = new THREE.Mesh(new THREE.BoxGeometry(0.06,2.15,0.1), frameMat);
-  frameR.position.set(0.91, 1.075, 0); g.add(frameR);
-  // Top frame
-  const frameTop = new THREE.Mesh(new THREE.BoxGeometry(1.0,0.08,0.1), frameMat);
-  frameTop.position.set(0.44, 2.11, 0); g.add(frameTop);
-  g.position.set(x,0,z); g.rotation.y=rotY; scene.add(g);
+
+  // Door panel — hinge at local x=0, panel extends +x
+  const panel = new THREE.Mesh(new THREE.BoxGeometry(DW, DH, 0.05), doorMat);
+  panel.position.set(DW/2, DH/2, 0); g.add(panel);
+
+  // Panels on door for detail
+  const panelDetail = new THREE.MeshStandardMaterial({color:0x4a2e18, roughness:0.7});
+  for (const py of [0.45, 1.2]) {
+    const dp = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.35, 0.008), panelDetail);
+    dp.position.set(DW/2, py, 0.028); g.add(dp);
+    const dp2 = dp.clone(); dp2.position.z = -0.028; g.add(dp2);
+  }
+
+  // Handle + lock plate
+  const handleMat = new THREE.MeshStandardMaterial({color:0xbb9944,metalness:0.9,roughness:0.15});
+  const handleBase = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.1, 0.02), handleMat);
+  handleBase.position.set(DW-0.1, DH*0.48, 0.035); g.add(handleBase);
+  const lever = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.02, 0.02), handleMat);
+  lever.position.set(DW-0.13, DH*0.48, 0.045); g.add(lever);
+  // Back handle
+  const handleBase2 = handleBase.clone(); handleBase2.position.z = -0.035; g.add(handleBase2);
+  const lever2 = lever.clone(); lever2.position.z = -0.045; g.add(lever2);
+
+  // Position: hinge at one edge of doorway, panel fills the opening
+  const wallX = side === 'right' ? HALL_WIDTH/2 : -HALL_WIDTH/2;
+  let hingeZ;
+  if (side === 'right') {
+    hingeZ = cz + DW/2; // hinge at +z edge, panel extends toward -z
+    g.rotation.y = Math.PI/2;
+  } else {
+    hingeZ = cz - DW/2; // hinge at -z edge, panel extends toward +z
+    g.rotation.y = -Math.PI/2;
+  }
+  g.position.set(wallX, 0, hingeZ);
+  scene.add(g);
+
+  // Door frame — world-space, flush with the wall
+  const frameMat = new THREE.MeshStandardMaterial({color:0x3a2815, roughness:0.6});
+  const frameW = 0.06, frameD = 0.14;
+  // Two vertical posts
+  for (const edgeZ of [cz - DW/2 - frameW/2, cz + DW/2 + frameW/2]) {
+    const post = new THREE.Mesh(new THREE.BoxGeometry(frameD, DH + 0.06, frameW), frameMat);
+    post.position.set(wallX, (DH+0.06)/2, edgeZ); scene.add(post);
+  }
+  // Top header
+  const header = new THREE.Mesh(new THREE.BoxGeometry(frameD, 0.08, DW + frameW*2), frameMat);
+  header.position.set(wallX, DH + 0.04, cz); scene.add(header);
 
   const d = {
     group:g, mesh:panel, isOpen:open, locked, type:'door',
@@ -970,7 +1009,6 @@ function addDoor(x,z,rotY=0,open=false,locked=false) {
     interact: () => {
       fourthWall.doorsOpened++;
       if (d.locked) {
-        // FOURTH WALL: The Tenant predicts you'll try the locked door
         if (fourthWall.tenantAwareness > 30 && Math.random() > 0.5) {
           playTenantVoice("That one won't open.\nI already told you.");
         } else {
@@ -1102,7 +1140,7 @@ const doorwayDefs = [
   { seg: 4, side: 'left',  doorZ: -18.5 },
   { seg: 5, side: 'right', doorZ: -23.5 },
 ];
-const DOOR_GAP_W = 2.0; // doorway width in z (wide enough for door swing)
+const DOOR_GAP_W = 1.15; // doorway width in z (slightly wider than 0.92 door)
 const DOOR_GAP_H = 2.15; // doorway height
 
 for (let i = 0; i < SEGMENTS; i++) {
@@ -1146,15 +1184,52 @@ addWall(0, WH/2, -SEGMENTS*5+2.5, HALL_WIDTH, WH, 0.12);
 addPipe(-1.2, 2.85, -1, -1.2, 2.85, -SEGMENTS*5+3, 0.04);
 addPipe(1.1, 2.9, -2, 1.1, 2.9, -SEGMENTS*5+3, 0.02);
 
+// ─── HALLWAY DETAILS (quality) ───
+const bbMat = new THREE.MeshStandardMaterial({color:0x1a1008, roughness:0.8});
+// Baseboards along both hallway walls
+for (let i = 0; i < SEGMENTS; i++) {
+  const z = -i*5;
+  for (const sx of [-1,1]) {
+    const bx = sx * (HALL_WIDTH/2 - 0.03);
+    // Check if this segment/side has a doorway — skip baseboard there
+    const hasDoor = doorwayDefs.some(d => d.seg === i && d.side === (sx>0?'right':'left'));
+    if (!hasDoor) {
+      const bb = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.1, 5), bbMat);
+      bb.position.set(bx, 0.05, z); scene.add(bb);
+    }
+  }
+}
+// Random floor stains
+const stainMat = new THREE.MeshStandardMaterial({color:0x0a0805,roughness:1,transparent:true,opacity:0.3});
+for (let i = 0; i < 8; i++) {
+  const s = new THREE.Mesh(new THREE.CircleGeometry(0.15+Math.random()*0.3, 12), stainMat);
+  s.rotation.x = -Math.PI/2;
+  s.position.set((Math.random()-0.5)*2, 0.002, -Math.random()*SEGMENTS*5);
+  scene.add(s);
+}
+// Ceiling stains (water damage)
+const cStainMat = new THREE.MeshStandardMaterial({color:0x151210,roughness:1,transparent:true,opacity:0.25});
+for (let i = 0; i < 5; i++) {
+  const s = new THREE.Mesh(new THREE.CircleGeometry(0.2+Math.random()*0.4, 10), cStainMat);
+  s.rotation.x = Math.PI/2;
+  s.position.set((Math.random()-0.5)*2, 2.998, -2-Math.random()*SEGMENTS*4);
+  scene.add(s);
+}
+
 // ─── APARTMENTS ───
 function buildApartment(aptX, aptZ, side, matW, floorM, opts={}) {
   addWall(aptX, WH/2, aptZ-2.5, 6, WH, 0.12, matW);
   addWall(aptX, WH/2, aptZ+2.5, 6, WH, 0.12, matW);
   addWall(aptX + (side==='right'?3:-3), WH/2, aptZ, 0.12, WH, 5, matW);
   addFloor(aptX, aptZ, 6, 5, floorM); addCeiling(aptX, aptZ, 6, 5);
-  const doorX = side==='right' ? HALL_WIDTH/2 : -HALL_WIDTH/2;
-  const doorRot = side==='right' ? Math.PI/2 : -Math.PI/2;
-  return addDoor(doorX, aptZ+0.5, doorRot, opts.open||false, opts.locked||false);
+  // Baseboard trim inside apartment
+  const bbMat = new THREE.MeshStandardMaterial({color:0x1a1008, roughness:0.8});
+  const bbH = 0.08;
+  addWall(aptX, bbH/2, aptZ-2.49, 6, bbH, 0.02, bbMat);
+  addWall(aptX, bbH/2, aptZ+2.49, 6, bbH, 0.02, bbMat);
+  addWall(aptX+(side==='right'?2.99:-2.99), bbH/2, aptZ, 0.02, bbH, 5, bbMat);
+  const doorCZ = aptZ + 0.5; // center of doorway
+  return addDoor(doorCZ, side, opts.open||false, opts.locked||false);
 }
 
 // Apt 101
@@ -2041,10 +2116,12 @@ function animate() {
   sanity = Math.max(0, Math.min(100, sanity+delta*mode.sanityRecovery));
   const sN = sanity/100;
   sanityOverlay.style.opacity = (1-sN)*0.6;
+  // Sanity shake — set (not accumulate) small random offset, damped by lerp
   if(sanity<50) {
-    const shake=(1-sanity/50)*0.004;
-    camera.rotation.z+=(Math.random()-0.5)*shake;
-    camera.rotation.x+=(Math.random()-0.5)*shake*0.3;
+    const shake=(1-sanity/50)*0.003;
+    camera.rotation.z = THREE.MathUtils.lerp(camera.rotation.z, (Math.random()-0.5)*shake, delta*8);
+  } else {
+    camera.rotation.z = THREE.MathUtils.lerp(camera.rotation.z, 0, delta*5);
   }
 
   breathTimer+=delta;
