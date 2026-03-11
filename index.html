@@ -884,7 +884,7 @@ const floorMatTile = new THREE.MeshStandardMaterial({ map: sharedFloorTex, rough
 const floorMatConcrete = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.95 });
 const floorMatWood = new THREE.MeshStandardMaterial({ color: 0x1e1408, roughness: 0.85 });
 const ceilingMat = new THREE.MeshStandardMaterial({ color: 0x1f1e1c, roughness: 0.9 });
-const doorMat = new THREE.MeshStandardMaterial({ color: 0x2a1f15, roughness: 0.7 });
+const doorMat = new THREE.MeshStandardMaterial({ color: 0x5a3a20, roughness: 0.6, metalness: 0.05 });
 const metalMat = new THREE.MeshStandardMaterial({ color: 0x3a3a3a, metalness: 0.7, roughness: 0.4 });
 
 // ════════════════════════════════════════
@@ -953,11 +953,15 @@ function addDoor(x,z,rotY=0,open=false,locked=false) {
   const handleMat = new THREE.MeshStandardMaterial({color:0xaa9955,metalness:0.9,roughness:0.2});
   const handle = new THREE.Mesh(new THREE.SphereGeometry(0.025,8,8), handleMat);
   handle.position.set(0.75,1.0,0.05); g.add(handle);
-  const frameMat = new THREE.MeshStandardMaterial({color:0x181210,roughness:0.8});
-  [[x-0.02,z],[x+0.92,z]].forEach(([fx,fz]) => {
-    const f = new THREE.Mesh(new THREE.BoxGeometry(0.05,2.15,0.1), frameMat);
-    f.position.set(fx,1.075,fz); scene.add(f);
-  });
+  const frameMat = new THREE.MeshStandardMaterial({color:0x302015,roughness:0.7});
+  // Door frame posts as children of the rotated group so they align correctly
+  const frameL = new THREE.Mesh(new THREE.BoxGeometry(0.06,2.15,0.1), frameMat);
+  frameL.position.set(-0.03, 1.075, 0); g.add(frameL);
+  const frameR = new THREE.Mesh(new THREE.BoxGeometry(0.06,2.15,0.1), frameMat);
+  frameR.position.set(0.91, 1.075, 0); g.add(frameR);
+  // Top frame
+  const frameTop = new THREE.Mesh(new THREE.BoxGeometry(1.0,0.08,0.1), frameMat);
+  frameTop.position.set(0.44, 2.11, 0); g.add(frameTop);
   g.position.set(x,0,z); g.rotation.y=rotY; scene.add(g);
 
   const d = {
@@ -1098,7 +1102,7 @@ const doorwayDefs = [
   { seg: 4, side: 'left',  doorZ: -18.5 },
   { seg: 5, side: 'right', doorZ: -23.5 },
 ];
-const DOOR_GAP_W = 1.2; // doorway width in z
+const DOOR_GAP_W = 2.0; // doorway width in z (wide enough for door swing)
 const DOOR_GAP_H = 2.15; // doorway height
 
 for (let i = 0; i < SEGMENTS; i++) {
@@ -1205,6 +1209,12 @@ addDoorNum(-HALL_WIDTH/2-0.01, 2, -8.5, '102', -Math.PI/2);
 addDoorNum(HALL_WIDTH/2+0.01, 2, -13.5, '103', Math.PI/2);
 addDoorNum(-HALL_WIDTH/2-0.01, 2, -18.5, '104', -Math.PI/2);
 addDoorNum(HALL_WIDTH/2+0.01, 2, -23.5, '105', Math.PI/2);
+
+// Small lights above each doorway so they're visible
+[{x:1.3,z:-3.5},{x:-1.3,z:-8.5},{x:1.3,z:-13.5},{x:-1.3,z:-18.5},{x:1.3,z:-23.5}].forEach(d => {
+  const dl = new THREE.PointLight(0xffddaa, 0.8, 5, 2);
+  dl.position.set(d.x, 2.3, d.z); scene.add(dl);
+});
 
 // ─── CORRIDOR TO BASEMENT ───
 for (let i = 0; i < 5; i++) {
