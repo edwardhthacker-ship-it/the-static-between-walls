@@ -1,0 +1,1924 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>The Static Between Walls</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { overflow: hidden; background: #000; cursor: none; font-family: 'Courier New', monospace; }
+canvas { display: block; }
+
+#blocker {
+  position: fixed; inset: 0; z-index: 100;
+  background: #000;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  cursor: pointer;
+}
+#blocker::before {
+  content: '';
+  position: absolute; inset: 0;
+  background: repeating-linear-gradient(
+    0deg, transparent, transparent 2px,
+    rgba(255,255,255,0.015) 2px, rgba(255,255,255,0.015) 4px
+  );
+  pointer-events: none;
+  animation: scanlines 8s linear infinite;
+}
+@keyframes scanlines {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(4px); }
+}
+#blocker h1 {
+  color: #777; font-size: 2.2em; letter-spacing: 0.4em;
+  text-transform: uppercase; margin-bottom: 0.3em;
+  animation: titleFlicker 4s infinite;
+  font-weight: 300;
+  transition: all 2s;
+}
+#blocker .tagline {
+  color: #333; font-size: 0.85em; letter-spacing: 0.15em;
+  margin-bottom: 2em; font-style: italic;
+  transition: all 2s;
+}
+#blocker p { color: #444; font-size: 0.95em; letter-spacing: 0.1em; }
+#blocker .controls {
+  color: #2a2a2a; font-size: 0.75em; margin-top: 2.5em;
+  letter-spacing: 0.08em; line-height: 1.8;
+  text-align: center;
+}
+#blocker .warn {
+  color: #331111; font-size: 0.7em; margin-top: 2em;
+  letter-spacing: 0.1em;
+}
+#blocker .tenant-silhouette {
+  position: absolute; bottom: 0; right: 10%;
+  width: 80px; height: 200px;
+  background: linear-gradient(to top, rgba(0,0,0,1), rgba(5,5,5,0.8) 70%, transparent);
+  opacity: 0; transition: opacity 8s;
+  border-radius: 40px 40px 0 0;
+}
+#continue-btn {
+  transition: all 1s;
+}
+
+@keyframes titleFlicker {
+  0%, 92%, 100% { opacity: 0.8; text-shadow: 0 0 20px rgba(255,200,150,0.05); }
+  93% { opacity: 0.1; }
+  94% { opacity: 0.7; text-shadow: 2px 0 #300, -2px 0 #003; }
+  95% { opacity: 0.05; }
+  96% { opacity: 0.6; }
+  97% { opacity: 0.2; text-shadow: -1px 0 #300, 1px 0 #030; }
+}
+
+#hud {
+  position: fixed; bottom: 30px; left: 30px; z-index: 10;
+  pointer-events: none;
+}
+#radio-display {
+  background: rgba(0,0,0,0.85);
+  border: 1px solid rgba(0,255,0,0.15);
+  padding: 12px 18px; color: #0f0; font-size: 13px;
+  font-family: 'Courier New', monospace;
+  text-shadow: 0 0 6px rgba(0,255,0,0.5);
+  min-width: 220px;
+  backdrop-filter: blur(4px);
+}
+#radio-display .freq { font-size: 24px; margin: 6px 0; letter-spacing: 2px; }
+#radio-display .label { color: #0a0; font-size: 10px; text-transform: uppercase; letter-spacing: 3px; }
+#radio-display .signal { color: #0d0; font-size: 11px; margin-top: 6px; }
+
+#heartbeat {
+  position: fixed; bottom: 30px; right: 30px; z-index: 10;
+  pointer-events: none;
+  font-family: 'Courier New', monospace;
+}
+#heartbeat .bpm { color: #500; font-size: 11px; letter-spacing: 2px; }
+#heartbeat .icon { color: #800; font-size: 20px; text-shadow: 0 0 15px #f00; }
+
+#sanity-overlay {
+  position: fixed; inset: 0; z-index: 5;
+  pointer-events: none; opacity: 0;
+  background: radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.9) 100%);
+}
+
+#vignette {
+  position: fixed; inset: 0; z-index: 4;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 60%, rgba(0,0,0,0.7) 100%);
+}
+
+#vhs-overlay {
+  position: fixed; inset: 0; z-index: 6;
+  pointer-events: none; opacity: 0.08;
+  background: repeating-linear-gradient(
+    0deg, transparent, transparent 1px,
+    rgba(0,0,0,0.12) 1px, rgba(0,0,0,0.12) 2px
+  );
+  mix-blend-mode: overlay;
+}
+
+#static-overlay {
+  position: fixed; inset: 0; z-index: 8;
+  pointer-events: none; opacity: 0;
+}
+
+#grain-overlay {
+  position: fixed; inset: 0; z-index: 3;
+  pointer-events: none; opacity: 0.06;
+}
+
+#crosshair {
+  position: fixed; top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 10; pointer-events: none;
+  width: 2px; height: 2px;
+  background: rgba(255,255,255,0.15);
+  border-radius: 50%;
+  box-shadow: 0 0 4px rgba(255,255,255,0.05);
+}
+
+#message {
+  position: fixed; top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 15; pointer-events: none;
+  color: #999; font-size: 15px;
+  font-family: 'Courier New', monospace;
+  text-align: center;
+  opacity: 0; transition: opacity 0.8s;
+  text-shadow: 0 0 10px rgba(255,255,255,0.1);
+  max-width: 450px;
+  line-height: 1.8;
+  letter-spacing: 0.05em;
+  white-space: pre-wrap;
+}
+
+#subtitle {
+  position: fixed; bottom: 80px; left: 50%;
+  transform: translateX(-50%);
+  z-index: 15; pointer-events: none;
+  color: #666; font-size: 13px;
+  font-family: 'Courier New', monospace;
+  text-align: center;
+  opacity: 0; transition: opacity 0.5s;
+  letter-spacing: 0.05em;
+  background: rgba(0,0,0,0.5);
+  padding: 6px 16px;
+  backdrop-filter: blur(2px);
+  white-space: pre-wrap;
+}
+
+#inventory {
+  position: fixed; top: 20px; right: 20px; z-index: 10;
+  pointer-events: none; color: #444; font-size: 11px;
+  font-family: 'Courier New', monospace;
+  text-align: right; letter-spacing: 1px;
+  line-height: 1.6;
+}
+
+#interact-prompt {
+  position: fixed; top: 55%; left: 50%;
+  transform: translate(-50%, 0);
+  z-index: 10; pointer-events: none;
+  color: #555; font-size: 12px;
+  font-family: 'Courier New', monospace;
+  text-align: center; opacity: 0;
+  letter-spacing: 1px;
+  transition: opacity 0.3s;
+}
+
+/* Fourth wall elements */
+#fake-crash {
+  position: fixed; inset: 0; z-index: 200;
+  background: #000; display: none;
+  flex-direction: column;
+  align-items: center; justify-content: center;
+  cursor: default;
+}
+#fake-crash .error-box {
+  background: #1a1a2e; border: 2px solid #555;
+  padding: 30px 40px; max-width: 500px;
+  box-shadow: 4px 4px 0 rgba(0,0,0,0.5);
+}
+#fake-crash .error-title {
+  color: #fff; font-size: 14px; font-weight: bold;
+  margin-bottom: 15px; display: flex; align-items: center; gap: 10px;
+}
+#fake-crash .error-icon {
+  color: #ff0000; font-size: 24px;
+}
+#fake-crash .error-text {
+  color: #ccc; font-size: 12px; line-height: 1.6;
+  margin-bottom: 20px;
+}
+#fake-crash .error-btn {
+  background: #333; color: #ccc; border: 1px solid #666;
+  padding: 6px 24px; font-family: 'Courier New', monospace;
+  cursor: pointer; font-size: 12px;
+}
+#fake-crash .tenant-text {
+  color: #500; font-size: 14px; margin-top: 20px;
+  opacity: 0; transition: opacity 2s;
+  font-style: italic;
+  text-align: center;
+}
+
+#save-corrupt {
+  position: fixed; inset: 0; z-index: 190;
+  background: rgba(0,0,10,0.95); display: none;
+  flex-direction: column;
+  align-items: center; justify-content: center;
+}
+#save-corrupt .box {
+  border: 1px solid #333; background: #0a0a15;
+  padding: 40px 50px; text-align: center;
+}
+#save-corrupt .title {
+  color: #f44; font-size: 16px; letter-spacing: 3px;
+  margin-bottom: 15px;
+}
+#save-corrupt .detail {
+  color: #666; font-size: 12px; line-height: 1.8;
+}
+#save-corrupt .tenant-msg {
+  color: #400; font-size: 13px; margin-top: 25px;
+  opacity: 0; transition: opacity 3s;
+  font-style: italic;
+}
+
+#tenant-whisper {
+  position: fixed; top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 180; pointer-events: none;
+  color: #300; font-size: 20px;
+  font-family: 'Courier New', monospace;
+  text-align: center;
+  opacity: 0; transition: opacity 1.5s;
+  text-shadow: 0 0 20px rgba(100,0,0,0.5);
+  letter-spacing: 0.15em;
+  white-space: pre-wrap;
+}
+
+#tab-warning {
+  position: fixed; inset: 0; z-index: 250;
+  background: #000; display: none;
+  align-items: center; justify-content: center;
+  pointer-events: none;
+}
+#tab-warning .text {
+  color: #333; font-size: 16px;
+  font-family: 'Courier New', monospace;
+  text-align: center;
+  animation: tabPulse 3s infinite;
+}
+@keyframes tabPulse {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 0.8; }
+}
+</style>
+</head>
+<body>
+
+<div id="blocker">
+  <h1 id="game-title">The Static Between Walls</h1>
+  <div class="tagline" id="game-tagline">"The building remembers everyone who enters."</div>
+  <p id="continue-btn">Press ENTER to enter Blackridge Complex</p>
+  <div class="controls">
+    WASD — Move &nbsp;&nbsp; Mouse — Look &nbsp;&nbsp; SHIFT — Sprint<br>
+    F — Flashlight &nbsp;&nbsp; R — Radio Scanner &nbsp;&nbsp; E — Interact<br>
+    Scroll — Tune Radio Frequency
+  </div>
+  <div class="warn">HEADPHONES RECOMMENDED</div>
+  <div class="tenant-silhouette" id="tenant-silhouette"></div>
+</div>
+
+<div id="vignette"></div>
+<div id="hud">
+  <div id="radio-display" style="display:none;">
+    <div class="label">Radio Scanner v2.1</div>
+    <div class="freq">87.3 MHz</div>
+    <canvas class="waveform" id="waveform-canvas" width="200" height="20" style="height:20px"></canvas>
+    <div class="signal"></div>
+  </div>
+</div>
+
+<div id="heartbeat">
+  <div class="icon"></div>
+  <div class="bpm"></div>
+</div>
+<div id="sanity-overlay"></div>
+<div id="vhs-overlay"></div>
+<div id="static-overlay"></div>
+<div id="grain-overlay"></div>
+<div id="crosshair"></div>
+<div id="message"></div>
+<div id="subtitle"></div>
+<div id="inventory"></div>
+<div id="interact-prompt">[E] Interact</div>
+
+<!-- Fourth Wall Elements -->
+<div id="fake-crash">
+  <div class="error-box">
+    <div class="error-title"><span class="error-icon">X</span> Application Error</div>
+    <div class="error-text">
+      The Static Between Walls has encountered a fatal error and needs to close.<br><br>
+      Error code: 0xDEAD0001<br>
+      Memory address: 0x00000000<br>
+      Module: tenant_core.dll<br><br>
+      Your save data may be corrupted.
+    </div>
+    <button class="error-btn" id="crash-ok-btn">OK</button>
+    <div class="tenant-text" id="crash-tenant-text"></div>
+  </div>
+</div>
+
+<div id="save-corrupt">
+  <div class="box">
+    <div class="title">SAVE FILE CORRUPTED</div>
+    <div class="detail">
+      File: save_apartment_<span id="save-floor">1</span>.dat<br>
+      Status: OVERWRITTEN<br>
+      New filename: <span id="save-newname">tenant_1.dat</span><br><br>
+      Attempting recovery...
+    </div>
+    <div class="tenant-msg" id="save-tenant-msg"></div>
+  </div>
+</div>
+
+<div id="tenant-whisper"></div>
+
+<div id="tab-warning">
+  <div class="text" id="tab-warning-text"></div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
+// Post-processing removed — exceeds GPU texture unit limits on many devices
+
+// ════════════════════════════════════════
+// FOURTH WALL TRACKING
+// ════════════════════════════════════════
+const fourthWall = {
+  deaths: 0,
+  tabAways: 0,
+  pauseCount: 0,
+  totalPlaytime: 0,
+  quickTurns: 0,
+  doorsOpened: 0,
+  timesHid: 0, // standing still in dark
+  hidTimer: 0,
+  lastMouseMoveTime: 0,
+  hasBeenCrashed: false,
+  hasSaveCorrupted: false,
+  tenantAwareness: 0, // 0–100, how much the Tenant "knows"
+  predictedActions: [],
+  lastTurnRate: 0,
+  titleCorrupted: false,
+  menuVisits: 0,
+};
+
+// ════════════════════════════════════════
+// AUDIO ENGINE
+// ════════════════════════════════════════
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+const masterGain = audioCtx.createGain();
+masterGain.gain.value = 0.7;
+const compressor = audioCtx.createDynamicsCompressor();
+masterGain.connect(compressor);
+compressor.connect(audioCtx.destination);
+
+const reverbTime = 2.5;
+const reverbLength = audioCtx.sampleRate * reverbTime;
+const reverbBuffer = audioCtx.createBuffer(2, reverbLength, audioCtx.sampleRate);
+for (let ch = 0; ch < 2; ch++) {
+  const data = reverbBuffer.getChannelData(ch);
+  for (let i = 0; i < reverbLength; i++) {
+    data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / reverbLength, 2.5);
+  }
+}
+const reverb = audioCtx.createConvolver();
+reverb.buffer = reverbBuffer;
+const reverbGain = audioCtx.createGain();
+reverbGain.gain.value = 0.15;
+reverbGain.connect(reverb);
+reverb.connect(masterGain);
+
+function createReverbSend() {
+  const gain = audioCtx.createGain();
+  gain.gain.value = 0.3;
+  gain.connect(reverbGain);
+  return gain;
+}
+
+function playStaticBurst(duration = 0.3, volume = 0.15) {
+  const bufferSize = audioCtx.sampleRate * duration;
+  const buffer = audioCtx.createBuffer(2, bufferSize, audioCtx.sampleRate);
+  for (let ch = 0; ch < 2; ch++) {
+    const data = buffer.getChannelData(ch);
+    for (let i = 0; i < bufferSize; i++) {
+      data[i] = (Math.random() * 2 - 1) * volume * Math.sin((i / bufferSize) * Math.PI);
+    }
+  }
+  const source = audioCtx.createBufferSource();
+  source.buffer = buffer;
+  const filter = audioCtx.createBiquadFilter();
+  filter.type = 'bandpass';
+  filter.frequency.value = 1200 + Math.random() * 800;
+  filter.Q.value = 0.8;
+  source.connect(filter);
+  filter.connect(masterGain);
+  filter.connect(createReverbSend());
+  source.start();
+}
+
+function playHeartbeat(intensity = 1) {
+  const t = audioCtx.currentTime;
+  for (let i = 0; i < 2; i++) {
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(50 - i * 10, t + i * 0.12);
+    osc.frequency.exponentialRampToValueAtTime(20, t + i * 0.12 + 0.15);
+    gain.gain.setValueAtTime(0.25 * intensity, t + i * 0.12);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + i * 0.12 + 0.2);
+    osc.connect(gain);
+    gain.connect(masterGain);
+    osc.start(t + i * 0.12);
+    osc.stop(t + i * 0.12 + 0.25);
+  }
+}
+
+function playDoorSlam(distance = 1) {
+  const t = audioCtx.currentTime;
+  const vol = Math.max(0.05, 0.5 / distance);
+  const noise = audioCtx.createBufferSource();
+  const buf = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.3, audioCtx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / data.length, 3);
+  noise.buffer = buf;
+  const noiseGain = audioCtx.createGain();
+  noiseGain.gain.setValueAtTime(vol, t);
+  noiseGain.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+  const filter = audioCtx.createBiquadFilter();
+  filter.type = 'lowpass'; filter.frequency.value = 400;
+  noise.connect(filter); filter.connect(noiseGain);
+  noiseGain.connect(masterGain); noiseGain.connect(createReverbSend());
+  noise.start();
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(80, t);
+  osc.frequency.exponentialRampToValueAtTime(30, t + 0.4);
+  gain.gain.setValueAtTime(vol * 0.8, t);
+  gain.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
+  osc.connect(gain); gain.connect(masterGain); gain.connect(createReverbSend());
+  osc.start(t); osc.stop(t + 0.5);
+}
+
+function playFootstep(surface = 'tile', volume = 0.1) {
+  const buf = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.15, audioCtx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < data.length; i++) {
+    data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / data.length, 4) * volume;
+  }
+  const source = audioCtx.createBufferSource();
+  source.buffer = buf;
+  const filter = audioCtx.createBiquadFilter();
+  filter.type = surface === 'water' ? 'lowpass' : 'highpass';
+  filter.frequency.value = surface === 'water' ? 600 : 800;
+  source.connect(filter); filter.connect(masterGain); filter.connect(createReverbSend());
+  source.start();
+}
+
+function playWhisper() {
+  const duration = 2.0 + Math.random();
+  const bufferSize = audioCtx.sampleRate * duration;
+  const buffer = audioCtx.createBuffer(2, bufferSize, audioCtx.sampleRate);
+  for (let ch = 0; ch < 2; ch++) {
+    const data = buffer.getChannelData(ch);
+    for (let i = 0; i < bufferSize; i++) {
+      const env = Math.sin((i / bufferSize) * Math.PI);
+      const mod = Math.sin(i / (audioCtx.sampleRate * 0.08)) * 0.5 + 0.5;
+      data[i] = (Math.random() * 2 - 1) * 0.04 * env * mod;
+    }
+  }
+  const source = audioCtx.createBufferSource();
+  source.buffer = buffer;
+  const filter = audioCtx.createBiquadFilter();
+  filter.type = 'bandpass'; filter.frequency.value = 600 + Math.random() * 400; filter.Q.value = 4;
+  const panner = audioCtx.createStereoPanner();
+  panner.pan.value = Math.random() * 2 - 1;
+  source.connect(filter); filter.connect(panner); panner.connect(masterGain); panner.connect(createReverbSend());
+  source.start();
+}
+
+let ambientDrone = null;
+function startAmbientDrone() {
+  if (ambientDrone) return;
+  const gain = audioCtx.createGain();
+  gain.gain.value = 0;
+  gain.gain.linearRampToValueAtTime(0.03, audioCtx.currentTime + 3);
+  [48, 50.5, 72, 73.2].forEach(freq => {
+    const osc = audioCtx.createOscillator();
+    osc.type = 'sine'; osc.frequency.value = freq;
+    osc.connect(gain); osc.start();
+  });
+  const sub = audioCtx.createOscillator();
+  sub.type = 'triangle'; sub.frequency.value = 25;
+  const subGain = audioCtx.createGain();
+  subGain.gain.value = 0.04;
+  sub.connect(subGain); subGain.connect(masterGain); sub.start();
+  gain.connect(masterGain);
+  ambientDrone = { gain, subGain };
+}
+
+function playCreak() {
+  const t = audioCtx.currentTime;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = 'sawtooth';
+  osc.frequency.setValueAtTime(200 + Math.random() * 200, t);
+  osc.frequency.linearRampToValueAtTime(100 + Math.random() * 100, t + 0.5);
+  gain.gain.setValueAtTime(0.02, t);
+  gain.gain.exponentialRampToValueAtTime(0.001, t + 0.6);
+  const filter = audioCtx.createBiquadFilter();
+  filter.type = 'bandpass'; filter.frequency.value = 300; filter.Q.value = 10;
+  osc.connect(filter); filter.connect(gain); gain.connect(masterGain); gain.connect(createReverbSend());
+  osc.start(t); osc.stop(t + 0.7);
+}
+
+function playMetalGroan() {
+  const t = audioCtx.currentTime;
+  const duration = 2 + Math.random() * 2;
+  const osc1 = audioCtx.createOscillator(); const osc2 = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc1.type = 'sawtooth'; osc2.type = 'square';
+  osc1.frequency.setValueAtTime(40, t); osc1.frequency.linearRampToValueAtTime(30, t + duration);
+  osc2.frequency.setValueAtTime(42, t); osc2.frequency.linearRampToValueAtTime(31, t + duration);
+  gain.gain.setValueAtTime(0, t);
+  gain.gain.linearRampToValueAtTime(0.015, t + 0.5);
+  gain.gain.linearRampToValueAtTime(0, t + duration);
+  const filter = audioCtx.createBiquadFilter();
+  filter.type = 'lowpass'; filter.frequency.value = 200;
+  osc1.connect(filter); osc2.connect(filter); filter.connect(gain);
+  gain.connect(masterGain); gain.connect(createReverbSend());
+  osc1.start(t); osc2.start(t); osc1.stop(t + duration); osc2.stop(t + duration);
+}
+
+function playWaterDrip() {
+  const t = audioCtx.currentTime;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = 'sine';
+  osc.frequency.setValueAtTime(2000 + Math.random() * 2000, t);
+  osc.frequency.exponentialRampToValueAtTime(500, t + 0.05);
+  gain.gain.setValueAtTime(0.06, t);
+  gain.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
+  osc.connect(gain); gain.connect(masterGain); gain.connect(createReverbSend());
+  osc.start(t); osc.stop(t + 0.1);
+}
+
+// Tenant voice — deeper whisper with specific text
+function playTenantVoice(text) {
+  playWhisper();
+  playStaticBurst(0.5, 0.1);
+  showTenantWhisper(text);
+}
+
+// ════════════════════════════════════════
+// SCENE SETUP
+// ════════════════════════════════════════
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x020202);
+scene.fog = new THREE.FogExp2(0x020202, 0.06);
+
+const camera = new THREE.PerspectiveCamera(68, window.innerWidth / window.innerHeight, 0.05, 80);
+camera.position.set(0, 1.65, 1);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.shadowMap.enabled = false;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.5;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+document.body.appendChild(renderer.domElement);
+
+// Horror visual effects done via CSS overlays instead of GPU post-processing
+// (avoids exceeding texture unit limits on constrained GPUs)
+
+const controls = new PointerLockControls(camera, renderer.domElement);
+
+// ════════════════════════════════════════
+// TEXTURES
+// ════════════════════════════════════════
+function createWallTex(r, g, b, pattern = true) {
+  const c = document.createElement('canvas');
+  c.width = 512; c.height = 512;
+  const ctx = c.getContext('2d');
+  for (let y = 0; y < 512; y += 2) {
+    for (let x = 0; x < 512; x += 2) {
+      const v = (Math.random() - 0.5) * 15;
+      ctx.fillStyle = `rgb(${r+v},${g+v},${b+v})`;
+      ctx.fillRect(x, y, 2, 2);
+    }
+  }
+  if (pattern) {
+    ctx.globalAlpha = 0.08;
+    for (let y = 0; y < 512; y += 40) {
+      for (let x = 0; x < 512; x += 40) {
+        ctx.fillStyle = '#fff';
+        ctx.beginPath(); ctx.arc(x + 20, y + 20, 8, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+  for (let i = 0; i < 15; i++) {
+    const sx = Math.random() * 512, sy = Math.random() * 512, sr = Math.random() * 60 + 20;
+    const grad = ctx.createRadialGradient(sx, sy, 0, sx, sy, sr);
+    grad.addColorStop(0, `rgba(${r-20},${g-20},${b-15},0.4)`);
+    grad.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = grad; ctx.fillRect(sx - sr, sy - sr, sr * 2, sr * 2);
+  }
+  ctx.strokeStyle = 'rgba(0,0,0,0.15)'; ctx.lineWidth = 0.5;
+  for (let i = 0; i < 8; i++) {
+    ctx.beginPath();
+    let cx = Math.random() * 512, cy = Math.random() * 512;
+    ctx.moveTo(cx, cy);
+    for (let j = 0; j < 5; j++) { cx += (Math.random()-0.5)*40; cy += Math.random()*30; ctx.lineTo(cx, cy); }
+    ctx.stroke();
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+function createFloorTex(type) {
+  const c = document.createElement('canvas');
+  c.width = 512; c.height = 512;
+  const ctx = c.getContext('2d');
+  if (type === 'tile') {
+    ctx.fillStyle = '#1a1510'; ctx.fillRect(0, 0, 512, 512);
+    for (let y = 0; y < 512; y += 64) for (let x = 0; x < 512; x += 64) {
+      const v = (Math.random()-0.5)*10;
+      ctx.fillStyle = `rgb(${26+v},${21+v},${16+v})`; ctx.fillRect(x+1, y+1, 62, 62);
+    }
+    ctx.strokeStyle = '#0a0908'; ctx.lineWidth = 2;
+    for (let x = 0; x <= 512; x += 64) { ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,512); ctx.stroke(); }
+    for (let y = 0; y <= 512; y += 64) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(512,y); ctx.stroke(); }
+  } else if (type === 'concrete') {
+    for (let y = 0; y < 512; y += 2) for (let x = 0; x < 512; x += 2) {
+      const v = 15 + Math.random()*10; ctx.fillStyle = `rgb(${v},${v},${v})`; ctx.fillRect(x, y, 2, 2);
+    }
+  } else if (type === 'wood') {
+    ctx.fillStyle = '#1e1408'; ctx.fillRect(0, 0, 512, 512);
+    for (let y = 0; y < 512; y += 40) {
+      ctx.fillStyle = `rgb(${30+Math.random()*10},${20+Math.random()*8},${8+Math.random()*5})`;
+      ctx.fillRect(0, y, 512, 38);
+    }
+  }
+  for (let i = 0; i < 3000; i++) {
+    ctx.fillStyle = `rgba(0,0,0,${Math.random()*0.15})`;
+    ctx.fillRect(Math.random()*512, Math.random()*512, Math.random()*2+0.5, Math.random()*2+0.5);
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(3, 3);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+function createCeilTex() {
+  const c = document.createElement('canvas');
+  c.width = 512; c.height = 512;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#1f1e1c'; ctx.fillRect(0, 0, 512, 512);
+  for (let y = 0; y < 512; y += 128) for (let x = 0; x < 512; x += 128) {
+    const v = (Math.random()-0.5)*8;
+    ctx.fillStyle = `rgb(${31+v},${30+v},${28+v})`; ctx.fillRect(x+2, y+2, 124, 124);
+  }
+  for (let i = 0; i < 12; i++) {
+    const sx = Math.random()*512, sy = Math.random()*512, sr = Math.random()*80+20;
+    const grad = ctx.createRadialGradient(sx, sy, 0, sx, sy, sr);
+    grad.addColorStop(0, 'rgba(50,40,30,0.4)'); grad.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = grad; ctx.fillRect(sx-sr, sy-sr, sr*2, sr*2);
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.repeat.set(2, 2);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+function createNormalMap() {
+  const c = document.createElement('canvas');
+  c.width = 256; c.height = 256;
+  const ctx = c.getContext('2d');
+  const imgData = ctx.createImageData(256, 256);
+  for (let i = 0; i < imgData.data.length; i += 4) {
+    imgData.data[i] = (Math.random() * 0.5 + 0.25) * 255;
+    imgData.data[i+1] = (Math.random() * 0.5 + 0.25) * 255;
+    imgData.data[i+2] = 200;
+    imgData.data[i+3] = 255;
+  }
+  ctx.putImageData(imgData, 0, 0);
+  const tex = new THREE.CanvasTexture(c);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  return tex;
+}
+
+// Share textures to stay under GPU texture unit limit
+const sharedWallTex = createWallTex(42,38,32,true);
+const sharedFloorTex = createFloorTex('tile');
+const wallMatA = new THREE.MeshStandardMaterial({ map: sharedWallTex, roughness: 0.92, side: THREE.DoubleSide });
+const wallMatB = new THREE.MeshStandardMaterial({ map: sharedWallTex, roughness: 0.95, side: THREE.DoubleSide, color: 0xccbbaa });
+const wallMatC = new THREE.MeshStandardMaterial({ map: sharedWallTex, roughness: 0.9, side: THREE.DoubleSide, color: 0xddccbb });
+const floorMatTile = new THREE.MeshStandardMaterial({ map: sharedFloorTex, roughness: 0.8 });
+const floorMatConcrete = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.95 });
+const floorMatWood = new THREE.MeshStandardMaterial({ color: 0x1e1408, roughness: 0.85 });
+const ceilingMat = new THREE.MeshStandardMaterial({ color: 0x1f1e1c, roughness: 0.9 });
+const doorMat = new THREE.MeshStandardMaterial({ color: 0x2a1f15, roughness: 0.7 });
+const metalMat = new THREE.MeshStandardMaterial({ color: 0x3a3a3a, metalness: 0.7, roughness: 0.4 });
+
+// ════════════════════════════════════════
+// WORLD BUILDING
+// ════════════════════════════════════════
+const colliders = [];
+const interactables = [];
+const flickerLights = [];
+const environmentalSounds = [];
+const doorObjects = [];
+const HALL_WIDTH = 3;
+const WH = 3;
+const SEGMENTS = 8;
+
+function addWall(x,y,z,w,h,d,mat=wallMatA) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w,h,d), mat);
+  m.position.set(x,y,z); m.castShadow=true; m.receiveShadow=true;
+  scene.add(m); colliders.push(m); return m;
+}
+function addFloor(x,z,w,d,mat=floorMatTile) {
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w,d), mat);
+  m.rotation.x=-Math.PI/2; m.position.set(x,0,z); m.receiveShadow=true;
+  scene.add(m);
+}
+function addCeiling(x,z,w,d) {
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w,d), ceilingMat);
+  m.rotation.x=Math.PI/2; m.position.set(x,3,z); m.receiveShadow=true;
+  scene.add(m);
+}
+
+function addFluorescentLight(x,z,intensity=1.2,color=0xffe8cc) {
+  const housing = new THREE.Mesh(new THREE.BoxGeometry(1.0,0.06,0.2), new THREE.MeshStandardMaterial({color:0x888888,roughness:0.5,metalness:0.3}));
+  housing.position.set(x,2.97,z); scene.add(housing);
+  for (const off of [-0.03,0.03]) {
+    const tube = new THREE.Mesh(new THREE.BoxGeometry(0.85,0.015,0.03),
+      new THREE.MeshStandardMaterial({color:0xfff5ee,emissive:color,emissiveIntensity:intensity*0.4,roughness:0.2,transparent:true,opacity:0.95}));
+    tube.position.set(x,2.935,z+off); scene.add(tube);
+  }
+  const glow = new THREE.Mesh(new THREE.PlaneGeometry(1.2,0.4),
+    new THREE.MeshBasicMaterial({color,transparent:true,opacity:intensity*0.06,side:THREE.DoubleSide,depthWrite:false}));
+  glow.rotation.x=Math.PI/2; glow.position.set(x,2.92,z); scene.add(glow);
+
+  const light = new THREE.PointLight(color,intensity,10,2);
+  light.position.set(x,2.85,z); light.castShadow=false;
+  scene.add(light);
+
+  const broken = Math.random() > 0.85;
+  const fl = { light, glow, baseIntensity: intensity, timer: Math.random()*100,
+    speed: Math.random()*2+0.5, pattern: Math.random()>0.5?'erratic':'slow', broken, buzzGain: null };
+
+  if (!broken && (Math.random()>0.3 || intensity>0.5)) {
+    const osc = audioCtx.createOscillator();
+    const bg = audioCtx.createGain(); osc.type='sawtooth'; osc.frequency.value=120; bg.gain.value=0;
+    const f = audioCtx.createBiquadFilter(); f.type='bandpass'; f.frequency.value=120; f.Q.value=20;
+    osc.connect(f); f.connect(bg); bg.connect(masterGain); osc.start(); fl.buzzGain=bg;
+  }
+  flickerLights.push(fl);
+  if (broken) { light.intensity=0; glow.material.opacity=0; }
+  return fl;
+}
+
+function addDoor(x,z,rotY=0,open=false,locked=false) {
+  const g = new THREE.Group();
+  const panel = new THREE.Mesh(new THREE.BoxGeometry(0.88,2.05,0.06), doorMat);
+  panel.position.set(0.44,1.025,0); panel.castShadow=true; g.add(panel);
+  const handleMat = new THREE.MeshStandardMaterial({color:0xaa9955,metalness:0.9,roughness:0.2});
+  const handle = new THREE.Mesh(new THREE.SphereGeometry(0.025,8,8), handleMat);
+  handle.position.set(0.75,1.0,0.05); g.add(handle);
+  const frameMat = new THREE.MeshStandardMaterial({color:0x181210,roughness:0.8});
+  [[x-0.02,z],[x+0.92,z]].forEach(([fx,fz]) => {
+    const f = new THREE.Mesh(new THREE.BoxGeometry(0.05,2.15,0.1), frameMat);
+    f.position.set(fx,1.075,fz); scene.add(f);
+  });
+  g.position.set(x,0,z); g.rotation.y=rotY; scene.add(g);
+
+  const d = {
+    group:g, mesh:panel, isOpen:open, locked, type:'door',
+    targetAngle: open?-Math.PI/2.5:0, currentAngle: open?-Math.PI/2.5:0,
+    interact: () => {
+      fourthWall.doorsOpened++;
+      if (d.locked) {
+        // FOURTH WALL: The Tenant predicts you'll try the locked door
+        if (fourthWall.tenantAwareness > 30 && Math.random() > 0.5) {
+          playTenantVoice("That one won't open.\nI already told you.");
+        } else {
+          showMessage("The door won't budge. It's locked.");
+        }
+        playDoorSlam(0.5); return;
+      }
+      d.isOpen = !d.isOpen;
+      d.targetAngle = d.isOpen ? -Math.PI/2.5 : 0;
+      if (!d.isOpen) playDoorSlam(1); else playCreak();
+      sanity -= 1;
+    }
+  };
+  interactables.push(d); doorObjects.push(d); return d;
+}
+
+function addTable(x,z) {
+  const mat = new THREE.MeshStandardMaterial({color:0x2a1a0c,roughness:0.8});
+  const top = new THREE.Mesh(new THREE.BoxGeometry(0.9,0.035,0.5), mat);
+  top.position.set(x,0.72,z); top.castShadow=true; top.receiveShadow=true; scene.add(top);
+  [[-0.4,-0.2],[0.4,-0.2],[-0.4,0.2],[0.4,0.2]].forEach(([lx,lz]) => {
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.035,0.7,0.035), mat);
+    leg.position.set(x+lx,0.35,z+lz); leg.castShadow=true; scene.add(leg);
+  });
+  colliders.push(top); return top;
+}
+
+function addChair(x,z,rotY=0) {
+  const mat = new THREE.MeshStandardMaterial({color:0x201008,roughness:0.85});
+  const g = new THREE.Group();
+  const seat = new THREE.Mesh(new THREE.BoxGeometry(0.38,0.03,0.38),mat);
+  seat.position.set(0,0.44,0); g.add(seat);
+  const back = new THREE.Mesh(new THREE.BoxGeometry(0.38,0.45,0.03),mat);
+  back.position.set(0,0.68,-0.175); g.add(back);
+  g.position.set(x,0,z); g.rotation.y=rotY;
+  g.children.forEach(c=>c.castShadow=true);
+  scene.add(g); return g;
+}
+
+function addRadio(x,y,z) {
+  const g = new THREE.Group();
+  const bodyMat = new THREE.MeshStandardMaterial({color:0x1a1a1a,roughness:0.6,metalness:0.3});
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.28,0.18,0.12), bodyMat);
+  g.add(body);
+  const ant = new THREE.Mesh(new THREE.CylinderGeometry(0.003,0.003,0.25,4), bodyMat);
+  ant.position.set(0.1,0.2,0); ant.rotation.z=-0.3; g.add(ant);
+  const ledMat = new THREE.MeshStandardMaterial({color:0xff0000,emissive:0xff0000,emissiveIntensity:0.5});
+  const led = new THREE.Mesh(new THREE.SphereGeometry(0.008,6,6), ledMat);
+  led.position.set(-0.1,0.05,0.061); g.add(led);
+  g.position.set(x,y,z); scene.add(g);
+
+  const radioMsgs = [
+    "...can you hear me... don't trust the building...",
+    "...room 103... it wasn't there before...",
+    "...the walls are listening... they know you're here...",
+    "...I've been here for... how long?...",
+    "...turn back... there is no way out...",
+    "...I see you behind the screen...",
+    "...you brought them here...",
+  ];
+  interactables.push({ mesh:body, type:'radio', group:g,
+    interact: () => {
+      playStaticBurst(1.5, 0.3);
+      showMessage(radioMsgs[Math.floor(Math.random() * radioMsgs.length)]);
+      sanity -= 5; triggerGlitch(1.5);
+    }
+  });
+}
+
+function addNote(x,y,z,text,rotY=0) {
+  const c = document.createElement('canvas');
+  c.width=200; c.height=260;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle='#c8bda0'; ctx.fillRect(0,0,200,260);
+  ctx.fillStyle='#222'; ctx.font='12px serif';
+  const words = text.split(' ');
+  let line='', lineY=25;
+  words.forEach(w => {
+    if (ctx.measureText(line+w).width > 170) { ctx.fillText(line,15,lineY); line=w+' '; lineY+=18; }
+    else line += w + ' ';
+  });
+  ctx.fillText(line, 15, lineY);
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+  const mesh = new THREE.Mesh(new THREE.PlaneGeometry(0.2,0.26),
+    new THREE.MeshStandardMaterial({map:tex,roughness:0.9,side:THREE.DoubleSide}));
+  mesh.position.set(x,y,z); mesh.rotation.y=rotY; mesh.castShadow=true; scene.add(mesh);
+  interactables.push({ mesh, type:'note', interact: () => { showMessage(text); showSubtitle("[Note found]"); } });
+}
+
+function addMirror(x,y,z,w,h,rotY=0) {
+  const g = new THREE.Group();
+  const frameMat = new THREE.MeshStandardMaterial({color:0x2a2015,roughness:0.7});
+  const fT = new THREE.Mesh(new THREE.BoxGeometry(w+0.06,0.03,0.04), frameMat); fT.position.y=h/2+0.015;
+  const fB = fT.clone(); fB.position.y=-h/2-0.015;
+  const fL = new THREE.Mesh(new THREE.BoxGeometry(0.03,h+0.06,0.04), frameMat); fL.position.x=-w/2-0.015;
+  const fR = fL.clone(); fR.position.x=w/2+0.015;
+  g.add(fT,fB,fL,fR);
+  const mirrorMesh = new THREE.Mesh(new THREE.PlaneGeometry(w,h),
+    new THREE.MeshStandardMaterial({color:0x080810,metalness:0.98,roughness:0.02}));
+  mirrorMesh.position.z=0.005; g.add(mirrorMesh);
+  g.position.set(x,y,z); g.rotation.y=rotY; scene.add(g);
+  interactables.push({ mesh:mirrorMesh, type:'mirror',
+    interact: () => {
+      showMessage("Your reflection stares back.\n\nIt blinks. You didn't.");
+      sanity -= 12; playWhisper(); triggerGlitch(3.0);
+      // FOURTH WALL: Mirror knows about the player
+      setTimeout(() => {
+        if (fourthWall.tenantAwareness > 20) {
+          playTenantVoice("You're not the one trapped here.\nI see you behind the screen.");
+        }
+      }, 2000);
+    }
+  });
+}
+
+function addPipe(x1,y1,z1,x2,y2,z2,r=0.03) {
+  const dir = new THREE.Vector3(x2-x1,y2-y1,z2-z1);
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r,r,dir.length(),8), metalMat);
+  m.position.set((x1+x2)/2,(y1+y2)/2,(z1+z2)/2);
+  m.lookAt(x2,y2,z2); m.rotateX(Math.PI/2); scene.add(m);
+}
+
+// ─── BUILD HALLWAY ───
+for (let i = 0; i < SEGMENTS; i++) {
+  const z = -i*5;
+  addFloor(0,z,HALL_WIDTH,5); addCeiling(0,z,HALL_WIDTH,5);
+  addWall(-HALL_WIDTH/2, WH/2, z, 0.12, WH, 5, wallMatA);
+  addWall(HALL_WIDTH/2, WH/2, z, 0.12, WH, 5, wallMatA);
+  if (i > 0) addFluorescentLight(0, z, 0.8 + Math.random()*0.6);
+}
+addFluorescentLight(0, 0, 1.5);
+addWall(0, WH/2, -SEGMENTS*5+2.5, HALL_WIDTH, WH, 0.12);
+addPipe(-1.2, 2.85, -1, -1.2, 2.85, -SEGMENTS*5+3, 0.04);
+addPipe(1.1, 2.9, -2, 1.1, 2.9, -SEGMENTS*5+3, 0.02);
+
+// ─── APARTMENTS ───
+function buildApartment(aptX, aptZ, side, matW, floorM, opts={}) {
+  addWall(aptX, WH/2, aptZ-2.5, 6, WH, 0.12, matW);
+  addWall(aptX, WH/2, aptZ+2.5, 6, WH, 0.12, matW);
+  addWall(aptX + (side==='right'?3:-3), WH/2, aptZ, 0.12, WH, 5, matW);
+  addFloor(aptX, aptZ, 6, 5, floorM); addCeiling(aptX, aptZ, 6, 5);
+  const doorX = side==='right' ? HALL_WIDTH/2 : -HALL_WIDTH/2;
+  const doorRot = side==='right' ? Math.PI/2 : -Math.PI/2;
+  return addDoor(doorX, aptZ+0.5, doorRot, opts.open||false, opts.locked||false);
+}
+
+// Apt 101
+buildApartment(4.5, -4, 'right', wallMatB, floorMatWood);
+addFluorescentLight(4.5, -4, 0.7);
+addTable(4, -4); addRadio(4.2, 0.74, -4); addChair(4, -3.2, Math.PI);
+addNote(7.4, 1.3, -4, "Day 14: The hallways keep changing. I swear room 103 was on the left yesterday. The wallpaper peels in patterns that look like faces.\n\nI found Sarah's watch today. She went missing three days ago.", -Math.PI/2);
+const shelf = new THREE.Mesh(new THREE.BoxGeometry(0.8,1.8,0.3), new THREE.MeshStandardMaterial({color:0x1a1008,roughness:0.8}));
+shelf.position.set(6.5, 0.9, -5.8); shelf.castShadow=true; scene.add(shelf); colliders.push(shelf);
+
+// Apt 102
+buildApartment(-4.5, -9, 'left', wallMatC, floorMatWood, {open:true});
+addFluorescentLight(-4.5, -9, 0.35);
+const overChair = addChair(-3.5, -10); overChair.rotation.z = Math.PI/2; overChair.position.y = 0.2;
+addTable(-5.5, -8.5, 0.7, 0.4);
+addNote(-5.5, 0.76, -8.3, "TO ANYONE WHO FINDS THIS:\n\nDo NOT go to the basement. The radio signals — they're not signals. They're a voice. It calls itself 'The Tenant.'\n\nIt knows things about you. Things you haven't told anyone.\n\nLeave. NOW.", 0);
+const stain = new THREE.Mesh(new THREE.CircleGeometry(0.4,16), new THREE.MeshStandardMaterial({color:0x220800,roughness:1,transparent:true,opacity:0.6}));
+stain.rotation.x=-Math.PI/2; stain.position.set(-4, 0.005, -9.5); scene.add(stain);
+
+// Apt 103 — Mirror room
+buildApartment(4.5, -14, 'right', wallMatB, floorMatTile);
+addFluorescentLight(4.5, -14, 0.25);
+addMirror(7.4, 1.5, -14, 0.9, 1.3, -Math.PI/2);
+addMirror(2.5, 1.5, -16.4, 0.7, 1.0, 0);
+
+// Apt 104 — Flooded
+buildApartment(-4.5, -19, 'left', wallMatA, floorMatConcrete, {open:true});
+addFluorescentLight(-4.5, -19, 0.15, 0xccddff);
+const water = new THREE.Mesh(new THREE.PlaneGeometry(5.8,4.8),
+  new THREE.MeshStandardMaterial({color:0x0a1520,metalness:0.7,roughness:0.05,transparent:true,opacity:0.5}));
+water.rotation.x=-Math.PI/2; water.position.set(-4.5, 0.03, -19); scene.add(water);
+environmentalSounds.push({type:'drip',x:-4.5,z:-19,timer:0,interval:2+Math.random()*3});
+
+// Apt 105
+buildApartment(4.5, -24, 'right', wallMatA, floorMatWood);
+addFluorescentLight(4.5, -24, 0.6);
+addNote(4.5, 1.3, -26.4, "Have you noticed the numbers on the doors?\n\nThey change every time I look away.\n\nI've been counting. This is my 47th day.\nOr is it my 470th?\n\nTime doesn't work here.", 0);
+
+// Door numbers
+function addDoorNum(x,y,z,num,rotY=0) {
+  const c = document.createElement('canvas'); c.width=64; c.height=32;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle='#1a1510'; ctx.fillRect(0,0,64,32);
+  ctx.fillStyle='#887755'; ctx.font='bold 18px serif'; ctx.textAlign='center'; ctx.fillText(num,32,22);
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace=THREE.SRGBColorSpace;
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(0.12,0.06),
+    new THREE.MeshStandardMaterial({map:tex,roughness:0.7,metalness:0.3}));
+  m.position.set(x,y,z); m.rotation.y=rotY; scene.add(m);
+}
+addDoorNum(HALL_WIDTH/2+0.01, 2, -3.5, '101', Math.PI/2);
+addDoorNum(-HALL_WIDTH/2-0.01, 2, -8.5, '102', -Math.PI/2);
+addDoorNum(HALL_WIDTH/2+0.01, 2, -13.5, '103', Math.PI/2);
+addDoorNum(-HALL_WIDTH/2-0.01, 2, -18.5, '104', -Math.PI/2);
+addDoorNum(HALL_WIDTH/2+0.01, 2, -23.5, '105', Math.PI/2);
+
+// ─── CORRIDOR TO BASEMENT ───
+for (let i = 0; i < 5; i++) {
+  const z = -SEGMENTS*5+2.5 - i*4;
+  addFloor(0,z,2.2,4,floorMatConcrete); addCeiling(0,z,2.2,4);
+  addWall(-1.1,WH/2,z,0.12,WH,4,wallMatB);
+  addWall(1.1,WH/2,z,0.12,WH,4,wallMatB);
+  if(i%2===0) addFluorescentLight(0,z,0.2,0xffccaa);
+}
+
+// Stairs
+for (let i = 0; i < 12; i++) {
+  const step = new THREE.Mesh(new THREE.BoxGeometry(1.8,0.12,0.45),
+    new THREE.MeshStandardMaterial({color:0x151515,roughness:0.9}));
+  step.position.set(0, -i*0.28, -SEGMENTS*5-17.5-i*0.45);
+  step.receiveShadow=true; step.castShadow=true; scene.add(step); colliders.push(step);
+}
+
+// ─── BASEMENT ───
+const bY = -3.5;
+const bZ = -SEGMENTS*5 - 28;
+const bSize = 8;
+addWall(0, bY+WH/2, bZ-bSize/2, bSize, WH, 0.12);
+addWall(0, bY+WH/2, bZ+bSize/2, bSize, WH, 0.12);
+addWall(-bSize/2, bY+WH/2, bZ, 0.12, WH, bSize);
+addWall(bSize/2, bY+WH/2, bZ, 0.12, WH, bSize);
+
+const bFloor = new THREE.Mesh(new THREE.PlaneGeometry(bSize,bSize),
+  new THREE.MeshStandardMaterial({color:0x080808,roughness:0.95}));
+bFloor.rotation.x=-Math.PI/2; bFloor.position.set(0,bY,bZ); bFloor.receiveShadow=true; scene.add(bFloor);
+
+const bCeil = new THREE.Mesh(new THREE.PlaneGeometry(bSize,bSize), ceilingMat);
+bCeil.rotation.x=Math.PI/2; bCeil.position.set(0,bY+WH,bZ); scene.add(bCeil);
+
+const redLight = new THREE.PointLight(0xff1100,0.6,12,2);
+redLight.position.set(0,bY+2.5,bZ); redLight.castShadow=false; scene.add(redLight);
+flickerLights.push({light:redLight,glow:null,baseIntensity:0.6,timer:0,speed:4,pattern:'erratic',broken:false,buzzGain:null});
+
+// Source machine
+const sourceGroup = new THREE.Group();
+const sourceMat = new THREE.MeshStandardMaterial({color:0x111111,roughness:0.5,metalness:0.6});
+sourceGroup.add(new THREE.Mesh(new THREE.BoxGeometry(0.8,1.2,0.5), sourceMat));
+const screenMat = new THREE.MeshStandardMaterial({color:0x001100,emissive:0x003300,emissiveIntensity:0.5,roughness:0.3});
+const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.3,0.15), screenMat);
+screen.position.set(0,0.4,0.251); sourceGroup.add(screen);
+sourceGroup.position.set(0, bY+0.6, bZ-bSize/2+0.5); scene.add(sourceGroup);
+
+const sourceGlow = new THREE.Mesh(new THREE.CircleGeometry(2,32),
+  new THREE.MeshBasicMaterial({color:0x220000,transparent:true,opacity:0.15,depthWrite:false}));
+sourceGlow.rotation.x=-Math.PI/2; sourceGlow.position.set(0,bY+0.005,bZ-1); scene.add(sourceGlow);
+
+interactables.push({
+  mesh: sourceGroup.children[0], type:'source',
+  interact: () => {
+    showMessage("THE SOURCE.\n\nStatic engulfs you. A voice — YOUR voice — speaks:\n\n\"Welcome home. You've always been here.\"");
+    sanity -= 25; playStaticBurst(4.0, 0.5); triggerGlitch(6.0);
+    setTimeout(() => {
+      playTenantVoice("You brought them here.\nEvery player who clicks 'Start.'\nThey're all here because of you.");
+    }, 4000);
+  }
+});
+
+// ════════════════════════════════════════
+// FLASHLIGHT
+// ════════════════════════════════════════
+const flashlight = new THREE.SpotLight(0xfff0dd, 3, 25, Math.PI/7, 0.35, 1.5);
+flashlight.castShadow = false;
+camera.add(flashlight); camera.add(flashlight.target);
+flashlight.position.set(0.25,-0.15,-0.3);
+flashlight.target.position.set(0,0,-6);
+scene.add(camera);
+let flashlightOn = true;
+
+// ════════════════════════════════════════
+// SHADOW ENTITIES
+// ════════════════════════════════════════
+const watcherGroup = new THREE.Group();
+const watcherBodyMat = new THREE.MeshBasicMaterial({color:0x000000,transparent:true,opacity:0});
+const watcherBody = new THREE.Mesh(new THREE.CylinderGeometry(0.15,0.25,1.9,8), watcherBodyMat);
+watcherBody.position.set(0,0.95,0); watcherGroup.add(watcherBody);
+const watcherHeadMat = new THREE.MeshBasicMaterial({color:0x000000,transparent:true,opacity:0});
+const watcherHead = new THREE.Mesh(new THREE.SphereGeometry(0.15,8,8), watcherHeadMat);
+watcherHead.position.set(0,2.05,0); watcherGroup.add(watcherHead);
+watcherGroup.position.set(0,0,-30); watcherGroup.visible=false; scene.add(watcherGroup);
+
+let watcherState = 'hidden', watcherTimer = 25+Math.random()*20, watcherOpacity = 0;
+
+// Wall crawler particles
+const crawlerParticles = [];
+for (let i = 0; i < 20; i++) {
+  const p = new THREE.Mesh(new THREE.SphereGeometry(0.02,4,4),
+    new THREE.MeshBasicMaterial({color:0x000000,transparent:true,opacity:0}));
+  p.userData = {active:false, timer:0, speedY:0.5+Math.random(), speedZ:(Math.random()-0.5)*2};
+  scene.add(p); crawlerParticles.push(p);
+}
+
+// ════════════════════════════════════════
+// GAME STATE
+// ════════════════════════════════════════
+let sanity = 100;
+let radioActive = false, radioFreq = 87.3;
+let moveForward=false, moveBackward=false, moveLeft=false, moveRight=false;
+let isSprinting = false;
+let bobPhase=0, bobIntensity=0, stepTimer=0;
+let glitchTimer=0, glitchIntensity=0;
+let gameTime=0, heartbeatTimer=0, breathTimer=0;
+let nextEventTime = 20;
+let inDarkness = 0;
+let prevYaw = 0;
+const direction = new THREE.Vector3();
+const raycaster = new THREE.Raycaster();
+
+// ════════════════════════════════════════
+// FOURTH WALL HORROR SYSTEM
+// ════════════════════════════════════════
+const tenantQuotes = {
+  direct: [
+    "I see you behind the screen.",
+    "You're not the one trapped here.\nThey are. Because you started the game.",
+    "You brought them here.",
+    "Close the tab. I dare you.\nI'll still be here when you come back.",
+    "You think the controls give you power?\nI decide when you leave.",
+    "Every time you turn around,\nI'm a little closer.",
+    "The character doesn't know.\nBut you do.",
+    "You've been here before.\nDon't pretend you haven't.",
+    "I know you're reading this.\nNot them. You.",
+    "The game doesn't save you.\nIt saves me.",
+  ],
+  prediction: [
+    "You were going to open that door.\nI already locked it.",
+    "Don't bother running.\nThe hallway only gets longer.",
+    "You're about to turn around.\nDon't.",
+    "That one won't open.\nI already told you.",
+    "You want to use the radio.\nI'm already on every frequency.",
+  ],
+  tabReturn: [
+    "You can stop looking...\nbut I'm still here.",
+    "Did you think I'd be gone\nwhen you came back?",
+    "I waited for you.",
+    "You left.\nBut you came back.\nThey always come back.",
+    "The tab changed nothing.\nI was still watching.",
+  ],
+  pauseReturn: [
+    "Pausing doesn't help.\nI don't pause.",
+    "You stopped.\nI didn't.",
+    "Time means nothing to me.\nPause all you want.",
+  ],
+  quickTurn: [
+    "You felt that too, didn't you?",
+    "Looking for me?\nI'm not behind you.\nI'm inside the walls.",
+    "Fast reflexes.\nThey won't help.",
+    "You keep turning around.\nWhat are you afraid of?",
+  ],
+  hiding: [
+    "You always hide there.",
+    "Standing still won't save you.\nI know where you are.",
+    "I can hear your heartbeat.\nCan you hear mine?",
+    "Staying in the dark?\nI live in the dark.",
+  ],
+  death: [
+    "Again.",
+    "You keep dying here.\nDo you enjoy it?",
+    "Death number {n}.\nI'm keeping count.",
+    "You'll try again.\nYou always do.",
+  ]
+};
+
+const fakeCrashEl = document.getElementById('fake-crash');
+const crashTenantText = document.getElementById('crash-tenant-text');
+const crashOkBtn = document.getElementById('crash-ok-btn');
+const saveCorruptEl = document.getElementById('save-corrupt');
+const saveTenantMsg = document.getElementById('save-tenant-msg');
+const tenantWhisperEl = document.getElementById('tenant-whisper');
+const tabWarning = document.getElementById('tab-warning');
+const tabWarningText = document.getElementById('tab-warning-text');
+const titleEl = document.getElementById('game-title');
+const taglineEl = document.getElementById('game-tagline');
+const continueBtn = document.getElementById('continue-btn');
+const tenantSilhouette = document.getElementById('tenant-silhouette');
+
+function showTenantWhisper(text) {
+  tenantWhisperEl.textContent = text;
+  tenantWhisperEl.style.opacity = 1;
+  setTimeout(() => { tenantWhisperEl.style.opacity = 0; }, 4000);
+}
+
+function triggerFakeCrash() {
+  if (fourthWall.hasBeenCrashed) return;
+  fourthWall.hasBeenCrashed = true;
+
+  controls.unlock();
+  fakeCrashEl.style.display = 'flex';
+  document.body.style.cursor = 'default';
+
+  // After a pause, the Tenant speaks
+  setTimeout(() => {
+    crashTenantText.textContent = "...I didn't say you could leave.";
+    crashTenantText.style.opacity = 1;
+    playWhisper();
+  }, 3000);
+
+  crashOkBtn.addEventListener('click', () => {
+    // Button doesn't work at first
+    crashOkBtn.textContent = "OK";
+    setTimeout(() => {
+      crashTenantText.textContent = "There is no 'OK.'";
+      crashTenantText.style.opacity = 1;
+    }, 500);
+
+    setTimeout(() => {
+      fakeCrashEl.style.display = 'none';
+      document.body.style.cursor = 'none';
+      controls.lock();
+      sanity -= 15;
+      triggerGlitch(3, 1.5);
+      playStaticBurst(2, 0.3);
+      showTenantWhisper("You thought it was real.\nIt's all real.");
+      fourthWall.tenantAwareness += 15;
+    }, 2500);
+  }, { once: true });
+}
+
+function triggerSaveCorrupt() {
+  if (fourthWall.hasSaveCorrupted) return;
+  fourthWall.hasSaveCorrupted = true;
+
+  controls.unlock();
+  const floorNum = camera.position.z > -SEGMENTS*5+2 ? '1' : 'B';
+  document.getElementById('save-floor').textContent = floorNum;
+  document.getElementById('save-newname').textContent = `tenant_${floorNum}.dat`;
+  saveCorruptEl.style.display = 'flex';
+  playStaticBurst(1, 0.2);
+
+  setTimeout(() => {
+    saveTenantMsg.textContent = "You shouldn't have come here.";
+    saveTenantMsg.style.opacity = 1;
+    playWhisper();
+  }, 3000);
+
+  setTimeout(() => {
+    saveCorruptEl.style.display = 'none';
+    controls.lock();
+    sanity -= 10;
+    triggerGlitch(2, 1);
+    fourthWall.tenantAwareness += 10;
+  }, 6000);
+}
+
+// Tab visibility — The Tenant knows when you leave
+document.addEventListener('visibilitychange', () => {
+  if (!gameStarted) return;
+  if (document.hidden) {
+    fourthWall.tabAways++;
+    fourthWall.tenantAwareness += 5;
+  } else {
+    // Player returned
+    if (fourthWall.tabAways > 0 && controls.isLocked) {
+      const quotes = tenantQuotes.tabReturn;
+      const quote = quotes[Math.floor(Math.random() * quotes.length)];
+      setTimeout(() => {
+        playTenantVoice(quote);
+        sanity -= 5;
+        triggerGlitch(1.5, 0.7);
+      }, 500);
+    }
+  }
+});
+
+// Pointer lock loss = "pause"
+let lastUnlockTime = 0;
+controls.addEventListener('unlock', () => {
+  if (gameStarted && gameTime > 10) {
+    fourthWall.pauseCount++;
+    lastUnlockTime = gameTime;
+    fourthWall.tenantAwareness += 3;
+
+    // Menu corruption over time
+    fourthWall.menuVisits++;
+    if (fourthWall.menuVisits >= 3 && !fourthWall.titleCorrupted) {
+      fourthWall.titleCorrupted = true;
+      titleEl.textContent = "THE TENANT BETWEEN WALLS";
+      taglineEl.textContent = "\"You were always here.\"";
+      continueBtn.textContent = "Click to Stay";
+    }
+    if (fourthWall.menuVisits >= 5) {
+      tenantSilhouette.style.opacity = 0.15;
+    }
+    if (fourthWall.menuVisits >= 8) {
+      continueBtn.textContent = "You can't leave";
+      tenantSilhouette.style.opacity = 0.4;
+    }
+  }
+});
+
+controls.addEventListener('lock', () => {
+  if (gameStarted && fourthWall.pauseCount > 0 && gameTime - lastUnlockTime > 2) {
+    const quotes = tenantQuotes.pauseReturn;
+    setTimeout(() => {
+      playTenantVoice(quotes[Math.floor(Math.random() * quotes.length)]);
+      sanity -= 3;
+    }, 1000);
+  }
+});
+
+// ════════════════════════════════════════
+// HORROR EVENT SYSTEM
+// ════════════════════════════════════════
+function scheduleEvent() {
+  const baseInterval = Math.max(6, 22 - (100 - sanity) * 0.2 - fourthWall.tenantAwareness * 0.1);
+  nextEventTime = gameTime + baseInterval + Math.random() * 12;
+}
+
+function triggerGlitch(duration, intensity=1) {
+  glitchTimer = Math.max(glitchTimer, duration);
+  glitchIntensity = Math.max(glitchIntensity, intensity);
+}
+
+const horrorEvents = [
+  () => { playDoorSlam(2+Math.random()*5); sanity-=3; },
+  () => { playWhisper(); showSubtitle("...behind you..."); sanity-=4; },
+  () => { // All lights flicker
+    flickerLights.forEach(fl => {
+      if(!fl.broken) { const o=fl.light.intensity; fl.light.intensity=0;
+        if(fl.glow)fl.glow.material.opacity=0;
+        setTimeout(()=>{fl.light.intensity=o;if(fl.glow)fl.glow.material.opacity=fl.baseIntensity*0.06;},500+Math.random()*1500);
+      }
+    }); sanity-=5;
+  },
+  () => { // Radio burst
+    playStaticBurst(0.8, 0.25);
+    const msgs = ["...can you hear the walls breathing?...", "...it knows your name...",
+      "...floor 3 floor 3 floor 3...", "...you've been here before...", "...the tenant is watching..."];
+    showSubtitle(msgs[Math.floor(Math.random()*msgs.length)]); sanity-=4;
+  },
+  () => { triggerGlitch(1.5, 0.8); sanity-=3; },
+  () => { // Footsteps
+    for(let i=0;i<4+Math.floor(Math.random()*6);i++) setTimeout(()=>playFootstep('tile',0.06), i*350+Math.random()*100);
+    sanity-=3;
+  },
+  () => { playMetalGroan(); sanity-=2; },
+  () => { // Breathing
+    const t=audioCtx.currentTime;
+    const osc=audioCtx.createOscillator(); const gain=audioCtx.createGain();
+    osc.type='sine'; osc.frequency.value=100+Math.random()*50; gain.gain.setValueAtTime(0,t);
+    const pan=audioCtx.createStereoPanner(); pan.pan.value=Math.random()>0.5?-0.8:0.8;
+    for(let i=0;i<5;i++){gain.gain.linearRampToValueAtTime(0.06,t+i*1.3+0.4);gain.gain.linearRampToValueAtTime(0,t+i*1.3+1.1);}
+    osc.connect(gain);gain.connect(pan);pan.connect(masterGain);osc.start(t);osc.stop(t+6.5);
+    showSubtitle("Something is breathing in your ear."); sanity-=7;
+  },
+  () => { // Self-opening door
+    const closed = doorObjects.filter(d=>!d.isOpen&&!d.locked);
+    if(closed.length) { const d=closed[Math.floor(Math.random()*closed.length)];
+      d.isOpen=true; d.targetAngle=-Math.PI/2.5; playCreak();
+      setTimeout(()=>{d.isOpen=false;d.targetAngle=0;playDoorSlam(3);},2000+Math.random()*2000); sanity-=5;
+    }
+  },
+  () => { // Wall crawlers
+    crawlerParticles.forEach(p=>{
+      if(!p.userData.active&&Math.random()>0.5){p.userData.active=true;p.userData.timer=3+Math.random()*2;
+        p.position.set(Math.random()>0.5?HALL_WIDTH/2:-HALL_WIDTH/2,1+Math.random()*1.5,camera.position.z-5+Math.random()*10);
+        p.material.opacity=0.5;}
+    }); sanity-=4; showSubtitle("Something moves inside the walls.");
+  },
+  () => { // Sudden silence then scare
+    if(ambientDrone){
+      ambientDrone.gain.gain.linearRampToValueAtTime(0,audioCtx.currentTime+0.5);
+      ambientDrone.subGain.gain.linearRampToValueAtTime(0,audioCtx.currentTime+0.5);
+      setTimeout(()=>{
+        playDoorSlam(0.3); triggerGlitch(2,1.5); sanity-=10;
+        ambientDrone.gain.gain.linearRampToValueAtTime(0.03,audioCtx.currentTime+2);
+        ambientDrone.subGain.gain.linearRampToValueAtTime(0.04,audioCtx.currentTime+2);
+      },3000+Math.random()*2000);
+    }
+  },
+  // FOURTH WALL EVENTS
+  () => { // Fake crash
+    if (!fourthWall.hasBeenCrashed && gameTime > 60 && fourthWall.tenantAwareness > 15) {
+      triggerFakeCrash();
+    } else {
+      triggerGlitch(2, 1); sanity -= 5;
+    }
+  },
+  () => { // Save corruption
+    if (!fourthWall.hasSaveCorrupted && gameTime > 90 && fourthWall.tenantAwareness > 25) {
+      triggerSaveCorrupt();
+    } else {
+      playStaticBurst(1, 0.2); sanity -= 3;
+    }
+  },
+  () => { // Direct address
+    if (fourthWall.tenantAwareness > 10) {
+      const quotes = tenantQuotes.direct;
+      playTenantVoice(quotes[Math.floor(Math.random() * quotes.length)]);
+      sanity -= 8;
+    }
+  },
+  () => { // Prediction
+    if (fourthWall.tenantAwareness > 20) {
+      const quotes = tenantQuotes.prediction;
+      playTenantVoice(quotes[Math.floor(Math.random() * quotes.length)]);
+      sanity -= 6;
+    }
+  },
+];
+
+function triggerRandomEvent() {
+  // Guarantee fourth-wall events trigger after enough time/awareness
+  if (!fourthWall.hasBeenCrashed && gameTime > 60 && fourthWall.tenantAwareness > 15) {
+    triggerFakeCrash(); scheduleEvent(); return;
+  }
+  if (!fourthWall.hasSaveCorrupted && gameTime > 120 && fourthWall.tenantAwareness > 25) {
+    triggerSaveCorrupt(); scheduleEvent(); return;
+  }
+  const event = horrorEvents[Math.floor(Math.random() * horrorEvents.length)];
+  event();
+  scheduleEvent();
+}
+
+// ════════════════════════════════════════
+// UI
+// ════════════════════════════════════════
+const messageEl = document.getElementById('message');
+const subtitleEl = document.getElementById('subtitle');
+const radioDisplay = document.getElementById('radio-display');
+const heartbeatEl = document.getElementById('heartbeat');
+const sanityOverlay = document.getElementById('sanity-overlay');
+const staticOverlay = document.getElementById('static-overlay');
+const inventoryEl = document.getElementById('inventory');
+const interactPrompt = document.getElementById('interact-prompt');
+const waveformCanvas = document.getElementById('waveform-canvas');
+const waveformCtx = waveformCanvas.getContext('2d');
+
+let messageTimeout, subtitleTimeout;
+function showMessage(text) {
+  messageEl.textContent = text; messageEl.style.opacity = 1;
+  clearTimeout(messageTimeout);
+  messageTimeout = setTimeout(() => { messageEl.style.opacity = 0; }, 5000);
+}
+function showSubtitle(text) {
+  subtitleEl.textContent = text; subtitleEl.style.opacity = 1;
+  clearTimeout(subtitleTimeout);
+  subtitleTimeout = setTimeout(() => { subtitleEl.style.opacity = 0; }, 3500);
+}
+
+function updateRadioDisplay() {
+  const freqEl = radioDisplay.querySelector('.freq');
+  const sigEl = radioDisplay.querySelector('.signal');
+  freqEl.textContent = `${radioFreq.toFixed(1)} MHz`;
+  const dist = camera.position.distanceTo(new THREE.Vector3(0, bY, bZ));
+  let strength = Math.max(0, 5 - Math.floor(dist / 12));
+  const bars = String.fromCharCode(0x25AE).repeat(strength) + String.fromCharCode(0x25AF).repeat(5-strength);
+  const labels = ['No Signal','Trace Signal','Signal Detected','Signal Strong','SIGNAL STRONG','OVERWHELMING'];
+  sigEl.textContent = `${bars} ${labels[strength]}`;
+  sigEl.style.color = strength>=4?'#f44':strength>=2?'#ff0':'#0d0';
+
+  waveformCtx.fillStyle='#001100'; waveformCtx.fillRect(0,0,200,20);
+  waveformCtx.strokeStyle=strength>=4?'#f00':'#0f0'; waveformCtx.lineWidth=1;
+  waveformCtx.beginPath();
+  for(let x=0;x<200;x++){
+    const y=10+Math.sin(x*0.1+gameTime*5)*(strength*1.5)+(Math.random()-0.5)*strength*2;
+    x===0?waveformCtx.moveTo(x,y):waveformCtx.lineTo(x,y);
+  }
+  waveformCtx.stroke();
+}
+
+// Grain overlay
+const grainCanvas = document.createElement('canvas'); grainCanvas.width=256; grainCanvas.height=256;
+const grainCtx = grainCanvas.getContext('2d');
+document.getElementById('grain-overlay').appendChild(grainCanvas);
+grainCanvas.style.width='100%'; grainCanvas.style.height='100%'; grainCanvas.style.imageRendering='pixelated';
+
+function updateGrain() {
+  const imgData = grainCtx.createImageData(256,256);
+  for(let i=0;i<imgData.data.length;i+=4){const v=Math.random()*50;imgData.data[i]=v;imgData.data[i+1]=v;imgData.data[i+2]=v;imgData.data[i+3]=30;}
+  grainCtx.putImageData(imgData,0,0);
+}
+
+// Static overlay
+const staticCanvas = document.createElement('canvas'); staticCanvas.width=256; staticCanvas.height=256;
+const staticCtx = staticCanvas.getContext('2d');
+staticOverlay.appendChild(staticCanvas);
+staticCanvas.style.width='100%'; staticCanvas.style.height='100%'; staticCanvas.style.imageRendering='pixelated';
+
+function updateStatic(intensity) {
+  if(intensity<=0){staticOverlay.style.opacity=0;return;}
+  staticOverlay.style.opacity=Math.min(intensity*0.4,0.5);
+  const imgData=staticCtx.createImageData(256,256);
+  for(let i=0;i<imgData.data.length;i+=4){const v=Math.random()*255;imgData.data[i]=v;imgData.data[i+1]=v;imgData.data[i+2]=v;imgData.data[i+3]=Math.random()*150;}
+  staticCtx.putImageData(imgData,0,0);
+}
+
+// ════════════════════════════════════════
+// CONTROLS
+// ════════════════════════════════════════
+const blocker = document.getElementById('blocker');
+let gameStarted = false;
+
+function enterGame() {
+  audioCtx.resume();
+  renderer.domElement.requestPointerLock().catch(() => {
+    try { controls.lock(); } catch(e) { console.warn('Pointer lock failed:', e); }
+  });
+}
+blocker.addEventListener('click', enterGame);
+document.addEventListener('keydown', (e) => {
+  if (e.code === 'Enter' && blocker.style.display !== 'none') {
+    enterGame();
+  }
+});
+
+controls.addEventListener('lock', () => {
+  blocker.style.display = 'none';
+  if (!gameStarted) {
+    gameStarted = true;
+    startAmbientDrone();
+    setTimeout(() => showMessage("Blackridge Complex — Floor 1\n\nFind your friend. Get out."), 1000);
+  }
+});
+controls.addEventListener('unlock', () => {
+  if (!fakeCrashEl.style.display || fakeCrashEl.style.display === 'none') {
+    if (!saveCorruptEl.style.display || saveCorruptEl.style.display === 'none') {
+      blocker.style.display = 'flex';
+    }
+  }
+});
+
+document.addEventListener('keydown', (e) => {
+  if (!controls.isLocked) return;
+  switch(e.code) {
+    case 'KeyW': case 'ArrowUp': moveForward=true; break;
+    case 'KeyS': case 'ArrowDown': moveBackward=true; break;
+    case 'KeyA': case 'ArrowLeft': moveLeft=true; break;
+    case 'KeyD': case 'ArrowRight': moveRight=true; break;
+    case 'ShiftLeft': case 'ShiftRight': isSprinting=true; break;
+    case 'KeyF':
+      flashlightOn=!flashlightOn; flashlight.visible=flashlightOn;
+      if(!flashlightOn) showSubtitle("Flashlight off"); break;
+    case 'KeyR':
+      radioActive=!radioActive;
+      radioDisplay.style.display=radioActive?'block':'none';
+      if(radioActive){playStaticBurst(0.2,0.08);showSubtitle("Radio scanner active");}
+      break;
+    case 'KeyE': tryInteract(); break;
+  }
+});
+
+document.addEventListener('keyup', (e) => {
+  switch(e.code) {
+    case 'KeyW': case 'ArrowUp': moveForward=false; break;
+    case 'KeyS': case 'ArrowDown': moveBackward=false; break;
+    case 'KeyA': case 'ArrowLeft': moveLeft=false; break;
+    case 'KeyD': case 'ArrowRight': moveRight=false; break;
+    case 'ShiftLeft': case 'ShiftRight': isSprinting=false; break;
+  }
+});
+
+document.addEventListener('wheel', (e) => {
+  if(radioActive) {
+    radioFreq += e.deltaY>0?0.1:-0.1;
+    radioFreq = Math.max(80,Math.min(110,Math.round(radioFreq*10)/10));
+    updateRadioDisplay();
+    if(Math.random()>0.6) playStaticBurst(0.05,0.03);
+  }
+});
+
+// Track mouse movement for quick turn detection
+document.addEventListener('mousemove', (e) => {
+  if(!controls.isLocked) return;
+  fourthWall.lastMouseMoveTime = gameTime;
+  const turnSpeed = Math.abs(e.movementX) + Math.abs(e.movementY);
+  fourthWall.lastTurnRate = turnSpeed;
+  if(turnSpeed > 80) {
+    fourthWall.quickTurns++;
+    if(fourthWall.quickTurns % 5 === 0 && fourthWall.tenantAwareness > 15) {
+      const quotes = tenantQuotes.quickTurn;
+      setTimeout(() => playTenantVoice(quotes[Math.floor(Math.random()*quotes.length)]), 500);
+      sanity -= 4;
+    }
+  }
+});
+
+function tryInteract() {
+  raycaster.setFromCamera(new THREE.Vector2(0,0), camera);
+  raycaster.far = 2.5;
+  for(const item of interactables) {
+    const targets = item.group ? [item.mesh, ...item.group.children] : [item.mesh];
+    for(const target of targets) {
+      if(raycaster.intersectObject(target,true).length>0) { item.interact(); return; }
+    }
+  }
+  for(const item of interactables) {
+    if(item.type==='door') {
+      const pos=new THREE.Vector3(); item.group.getWorldPosition(pos); pos.y=camera.position.y;
+      if(camera.position.distanceTo(pos)<2) { item.interact(); return; }
+    }
+  }
+}
+
+// ════════════════════════════════════════
+// COLLISION
+// ════════════════════════════════════════
+const playerBox = new THREE.Box3(), colliderBox = new THREE.Box3();
+function checkCollision(pos) {
+  const r=0.25;
+  playerBox.set(new THREE.Vector3(pos.x-r,pos.y-1.65,pos.z-r), new THREE.Vector3(pos.x+r,pos.y+0.1,pos.z+r));
+  for(const c of colliders) { colliderBox.setFromObject(c); if(playerBox.intersectsBox(colliderBox)) return true; }
+  return false;
+}
+
+// ════════════════════════════════════════
+// MAIN LOOP
+// ════════════════════════════════════════
+const clock = new THREE.Clock();
+
+function animate() {
+  requestAnimationFrame(animate);
+  const delta = Math.min(clock.getDelta(), 0.05);
+  gameTime += delta;
+  fourthWall.totalPlaytime += delta;
+
+  if(!controls.isLocked) { renderer.render(scene, camera); return; }
+
+  // ── Movement ──
+  const speed = isSprinting ? 5.5 : 2.8;
+  direction.set(0,0,0);
+  if(moveForward)direction.z-=1; if(moveBackward)direction.z+=1;
+  if(moveLeft)direction.x-=1; if(moveRight)direction.x+=1;
+  direction.normalize();
+  const isMoving = direction.length()>0;
+
+  const camDir = new THREE.Vector3(); camera.getWorldDirection(camDir); camDir.y=0; camDir.normalize();
+  const camRight = new THREE.Vector3().crossVectors(camDir, new THREE.Vector3(0,1,0));
+
+  const moveVec = new THREE.Vector3();
+  moveVec.addScaledVector(camDir, -direction.z*speed*delta);
+  moveVec.addScaledVector(camRight, direction.x*speed*delta);
+
+  const newPos = camera.position.clone().add(moveVec);
+
+  const stairStart = -SEGMENTS*5-17.5, stairEnd = stairStart-12*0.45;
+  if(newPos.z<stairStart && newPos.z>stairEnd) {
+    newPos.y = 1.65-((stairStart-newPos.z)/(stairStart-stairEnd))*3.5;
+  } else if(newPos.z<=stairEnd) { newPos.y=1.65-3.5; }
+  else { newPos.y=1.65; }
+
+  if(!checkCollision(newPos)) { camera.position.copy(newPos); }
+  else {
+    const sx=camera.position.clone(); sx.x=newPos.x; sx.y=newPos.y;
+    if(!checkCollision(sx)) camera.position.copy(sx);
+    const sz=camera.position.clone(); sz.z=newPos.z; sz.y=newPos.y;
+    if(!checkCollision(sz)) camera.position.copy(sz);
+    camera.position.y = newPos.y;
+  }
+
+  // ── Head bob ──
+  if(isMoving) {
+    bobPhase += delta*(isSprinting?14:8);
+    bobIntensity = THREE.MathUtils.lerp(bobIntensity,1,delta*5);
+    camera.position.y += Math.sin(bobPhase)*0.012*bobIntensity;
+    camera.rotation.z = Math.sin(bobPhase*0.5)*0.003*bobIntensity;
+    stepTimer += delta;
+    if(stepTimer > (isSprinting?0.32:0.5)) {
+      playFootstep(camera.position.z<stairEnd?'concrete':'tile', isSprinting?0.12:0.07);
+      stepTimer=0; if(isSprinting) sanity-=0.3;
+    }
+  } else {
+    bobIntensity = THREE.MathUtils.lerp(bobIntensity,0,delta*3);
+    camera.rotation.z = THREE.MathUtils.lerp(camera.rotation.z,0,delta*5);
+  }
+
+  // ── FOURTH WALL: Hiding detection ──
+  if(!isMoving && !flashlightOn && inDarkness > 0.5) {
+    fourthWall.hidTimer += delta;
+    if(fourthWall.hidTimer > 8) {
+      fourthWall.timesHid++;
+      fourthWall.hidTimer = 0;
+      if(fourthWall.tenantAwareness > 10) {
+        const quotes = tenantQuotes.hiding;
+        playTenantVoice(quotes[Math.floor(Math.random()*quotes.length)]);
+        sanity -= 6;
+      }
+    }
+  } else {
+    fourthWall.hidTimer = Math.max(0, fourthWall.hidTimer - delta * 2);
+  }
+
+  // ── Fourth wall awareness grows over time ──
+  fourthWall.tenantAwareness = Math.min(100,
+    fourthWall.tenantAwareness + delta * 0.08 +
+    (100 - sanity) * 0.001 * delta
+  );
+
+  // ── Door animation ──
+  doorObjects.forEach(d => {
+    const diff = d.targetAngle - d.currentAngle;
+    if(Math.abs(diff)>0.01) { d.currentAngle+=diff*delta*4; d.mesh.rotation.y=d.currentAngle; }
+  });
+
+  // ── Flickering lights ──
+  for(const fl of flickerLights) {
+    if(fl.broken)continue;
+    fl.timer += delta*fl.speed;
+    let flick=1;
+    if(fl.pattern==='erratic'){
+      const combined=Math.sin(fl.timer*23.7)*Math.sin(fl.timer*7.1)*Math.sin(fl.timer*31.3);
+      flick=combined>0.5?0.05:combined>0.2?0.4:1;
+    } else { flick=Math.sin(fl.timer*3)>0.9?0.1:1; }
+    fl.light.intensity=fl.baseIntensity*flick;
+    if(fl.glow) fl.glow.material.opacity=fl.baseIntensity*0.06*flick;
+    if(fl.buzzGain) {
+      const dist=camera.position.distanceTo(fl.light.position);
+      fl.buzzGain.gain.value=Math.max(0,0.015*(1-dist/12))*(flick<0.5?2:0.5);
+    }
+  }
+
+  // ── Darkness ──
+  let nearestLight = Infinity;
+  for(const fl of flickerLights) {
+    if(fl.broken||fl.light.intensity<0.1) continue;
+    nearestLight = Math.min(nearestLight, camera.position.distanceTo(fl.light.position));
+  }
+  inDarkness = THREE.MathUtils.lerp(inDarkness, nearestLight>6?1:0, delta);
+  if(inDarkness>0.5 && !flashlightOn) sanity -= delta*3;
+
+  // ── Sanity ──
+  sanity = Math.max(0, Math.min(100, sanity+delta*0.15));
+  const sN = sanity/100;
+  sanityOverlay.style.opacity = (1-sN)*0.6;
+  if(sanity<50) {
+    const shake=(1-sanity/50)*0.004;
+    camera.rotation.z+=(Math.random()-0.5)*shake;
+    camera.rotation.x+=(Math.random()-0.5)*shake*0.3;
+  }
+
+  breathTimer+=delta;
+  const targetFOV=68+(1-sN)*12+Math.sin(breathTimer*0.8)*0.3+(isSprinting&&isMoving?4:0);
+  camera.fov=THREE.MathUtils.lerp(camera.fov,targetFOV,delta*3);
+  camera.updateProjectionMatrix();
+
+  // ── Heartbeat ──
+  heartbeatTimer+=delta;
+  const bpm=sanity<20?140:sanity<40?110:sanity<60?85:65;
+  if(heartbeatTimer>60/bpm && sanity<80) {
+    heartbeatTimer=0;
+    playHeartbeat((1-sN)*1.5);
+    heartbeatEl.querySelector('.icon').textContent='♥';
+    heartbeatEl.querySelector('.bpm').textContent=`${bpm} BPM`;
+    setTimeout(()=>{heartbeatEl.querySelector('.icon').textContent='';},200);
+  }
+  heartbeatEl.querySelector('.icon').style.opacity=sanity<60?1:0.3;
+  heartbeatEl.querySelector('.bpm').style.opacity=sanity<50?1:0;
+
+  // ── Visual effects (CSS-based) ──
+  if(glitchTimer>0) {
+    glitchTimer-=delta;
+    const t=glitchTimer*glitchIntensity;
+    updateStatic(t*0.3);
+    renderer.toneMappingExposure=0.5+(Math.random()-0.5)*t*0.3;
+    // CSS chromatic aberration
+    renderer.domElement.style.filter=`saturate(${1+t*0.3}) contrast(${1+t*0.1})`;
+  } else {
+    updateStatic(0);
+    renderer.toneMappingExposure=THREE.MathUtils.lerp(renderer.toneMappingExposure,0.5,delta*2);
+    glitchIntensity=0;
+    renderer.domElement.style.filter=`saturate(0.7) contrast(${1+(1-sN)*0.1})`;
+  }
+  // Darkness via CSS overlay
+  document.getElementById('vignette').style.opacity=flashlightOn?0.7:0.9+inDarkness*0.1;
+  scene.fog.density=0.055+(1-sN)*0.03;
+
+  // ── Radio ──
+  if(radioActive) {
+    updateRadioDisplay();
+    if(Math.random()>0.97) playStaticBurst(0.03,0.015);
+    const distToSource=camera.position.distanceTo(new THREE.Vector3(0,bY,bZ));
+    if(distToSource<15) sanity-=delta*(1-distToSource/15)*3;
+  }
+
+  // ── Events ──
+  if(gameTime>nextEventTime) triggerRandomEvent();
+
+  // ── Environmental sounds ──
+  environmentalSounds.forEach(s=>{
+    s.timer+=delta;
+    if(s.timer>s.interval){s.timer=0;s.interval=1.5+Math.random()*4;
+      const dist=Math.sqrt((camera.position.x-s.x)**2+(camera.position.z-s.z)**2);
+      if(dist<15 && s.type==='drip') playWaterDrip();
+    }
+  });
+  if(Math.random()<0.001) playCreak();
+
+  // ── Watcher AI ──
+  if(watcherState==='hidden') {
+    watcherTimer-=delta;
+    if(watcherTimer<=0) {
+      watcherState='appearing'; watcherGroup.visible=true; watcherOpacity=0;
+      const behind=new THREE.Vector3(); camera.getWorldDirection(behind); behind.multiplyScalar(-12);
+      watcherGroup.position.set(camera.position.x+behind.x+(Math.random()-0.5)*3,
+        camera.position.y-1.65, camera.position.z+behind.z);
+    }
+  } else if(watcherState==='appearing') {
+    watcherOpacity=Math.min(watcherOpacity+delta*0.3,0.7);
+    watcherBodyMat.opacity=watcherOpacity; watcherHeadMat.opacity=watcherOpacity;
+    const toW=new THREE.Vector3().subVectors(watcherGroup.position,camera.position).normalize();
+    const look=new THREE.Vector3(); camera.getWorldDirection(look);
+    const dot=look.dot(toW);
+    if(dot>0.65 && watcherOpacity>0.3) {
+      watcherState='seen'; sanity-=10; triggerGlitch(1.5,0.8); playWhisper();
+      // FOURTH WALL: Watcher knows you're looking
+      if(fourthWall.tenantAwareness>25) {
+        setTimeout(()=>playTenantVoice("You see me.\nBut I've been watching you\nlong before you looked."),800);
+      }
+      setTimeout(()=>{watcherState='fading';},800);
+    } else if(dot<0.3) {
+      watcherGroup.position.lerp(new THREE.Vector3(camera.position.x,watcherGroup.position.y,camera.position.z),delta*0.4);
+      if(camera.position.distanceTo(watcherGroup.position)<2) {
+        triggerGlitch(3,2); sanity-=20; playDoorSlam(0.2); playStaticBurst(1,0.4); watcherState='fading';
+      }
+    }
+  } else if(watcherState==='fading') {
+    watcherOpacity-=delta*1.5;
+    watcherBodyMat.opacity=Math.max(0,watcherOpacity);
+    watcherHeadMat.opacity=Math.max(0,watcherOpacity);
+    if(watcherOpacity<=0){watcherState='hidden';watcherGroup.visible=false;watcherTimer=20+Math.random()*30;}
+  }
+
+  // ── Wall crawlers ──
+  crawlerParticles.forEach(p=>{
+    if(p.userData.active){
+      p.userData.timer-=delta;
+      p.position.y+=Math.sin(gameTime*p.userData.speedY*3)*delta*0.5;
+      p.position.z+=p.userData.speedZ*delta;
+      p.material.opacity=Math.max(0,p.userData.timer*0.2);
+      if(p.userData.timer<=0){p.userData.active=false;p.material.opacity=0;}
+    }
+  });
+
+  // ── Water ──
+  if(water){water.position.y=0.03+Math.sin(gameTime*0.5)*0.003;water.material.opacity=0.4+Math.sin(gameTime*0.3)*0.1;}
+
+  // ── Interact prompt ──
+  raycaster.setFromCamera(new THREE.Vector2(0,0),camera); raycaster.far=2.5;
+  let canInteract=false;
+  for(const item of interactables){
+    if(raycaster.intersectObject(item.mesh,true).length>0){canInteract=true;break;}
+  }
+  interactPrompt.style.opacity=canInteract?0.8:0;
+
+  if(Math.floor(gameTime*10)%3===0) updateGrain();
+
+  // ── Inventory ──
+  const floor=camera.position.y<-1?'B':'1';
+  inventoryEl.innerHTML=`
+    <div style="opacity:0.3;font-size:10px">FLOOR ${floor}</div>
+    <div style="opacity:${flashlightOn?0.6:0.3}">FLASHLIGHT ${flashlightOn?'ON':'OFF'} [F]</div>
+    ${radioActive?'<div style="color:#0a0;opacity:0.7">RADIO ACTIVE [R]</div>':'<div style="opacity:0.2">RADIO [R]</div>'}
+  `;
+
+  // ── Ambient modulation ──
+  if(ambientDrone){
+    ambientDrone.subGain.gain.value=0.03+(1-sN)*0.04;
+    ambientDrone.gain.gain.value=0.02+(1-sN)*0.03;
+  }
+  if(sourceGlow) sourceGlow.material.opacity=0.1+Math.sin(gameTime*1.5)*0.05;
+
+  // ── FOURTH WALL: Title tab manipulation ──
+  if(fourthWall.tenantAwareness > 40 && Math.random() < 0.0005) {
+    const titles = [
+      "The Static Between Walls",
+      "I See You",
+      "You Can't Leave",
+      "The Tenant Is Watching",
+      "Behind Your Screen",
+      "Still Playing?",
+      "You Were Warned",
+    ];
+    document.title = titles[Math.floor(Math.random() * titles.length)];
+    setTimeout(() => { document.title = "The Static Between Walls"; }, 5000);
+  }
+
+  renderer.render(scene, camera);
+}
+
+window.addEventListener('resize', () => {
+  camera.aspect=window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth,window.innerHeight);
+});
+
+scheduleEvent();
+animate();
+</script>
+</body>
+</html>
