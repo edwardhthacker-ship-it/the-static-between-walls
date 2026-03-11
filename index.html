@@ -1230,31 +1230,29 @@ interactables.push({
 // ════════════════════════════════════════
 // FLASHLIGHT
 // ════════════════════════════════════════
-const flashlight = new THREE.SpotLight(0xfff0dd, 5, 30, Math.PI/5, 0.3, 1.2);
+const flashlight = new THREE.SpotLight(0xfff0dd, 15, 40, Math.PI/5, 0.4, 1.0);
 flashlight.castShadow = false;
 camera.add(flashlight); camera.add(flashlight.target);
 flashlight.position.set(0.2,-0.1,-0.2);
 flashlight.target.position.set(0,0,-8);
 // Ambient fill so flashlight illuminates nearby area
-const flashFill = new THREE.PointLight(0xfff0dd, 0.5, 10);
+const flashFill = new THREE.PointLight(0xfff0dd, 2.0, 15);
 flashFill.position.set(0, 0, -0.5);
 camera.add(flashFill);
 
 // Volumetric light cone — visible beam using layered transparent cones
-const coneLength = 12;
-const coneMat = new THREE.MeshBasicMaterial({
-  color: 0xfff0dd, transparent: true, opacity: 0.02,
-  side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending
-});
+const coneLength = 10;
 const coneGroup = new THREE.Group();
-// Stack 4 cones for soft volumetric look
-for (let i = 0; i < 4; i++) {
-  const r = Math.tan(Math.PI/5) * coneLength * (0.6 + i * 0.15);
-  const geo = new THREE.ConeGeometry(r, coneLength, 16, 1, true);
+// Stack 5 cones for visible volumetric beam
+for (let i = 0; i < 5; i++) {
+  const r = Math.tan(Math.PI/5) * coneLength * (0.5 + i * 0.12);
+  const geo = new THREE.ConeGeometry(r, coneLength, 24, 1, true);
   geo.translate(0, -coneLength/2, 0);
   geo.rotateX(Math.PI/2);
-  const mat = coneMat.clone();
-  mat.opacity = 0.015 - i * 0.002;
+  const mat = new THREE.MeshBasicMaterial({
+    color: 0xfff8e0, transparent: true, opacity: 0.07 - i * 0.01,
+    side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending
+  });
   const mesh = new THREE.Mesh(geo, mat);
   mesh.renderOrder = 999;
   coneGroup.add(mesh);
@@ -1716,11 +1714,17 @@ function updateStatic(intensity) {
 const blocker = document.getElementById('blocker');
 let gameStarted = false;
 
+let lockPending = false;
 function enterGame() {
+  if (lockPending) return;
+  lockPending = true;
   audioCtx.resume();
-  renderer.domElement.requestPointerLock().catch(() => {
-    try { controls.lock(); } catch(e) { console.warn('Pointer lock failed:', e); }
-  });
+  try {
+    controls.lock();
+  } catch(e) {
+    console.warn('Pointer lock failed:', e);
+  }
+  setTimeout(() => { lockPending = false; }, 1000);
 }
 blocker.addEventListener('click', enterGame);
 document.addEventListener('keydown', (e) => {
@@ -2114,8 +2118,8 @@ function animate() {
     pos.needsUpdate = true;
     // Beam opacity flickers slightly at low sanity
     // Beam flickers at low sanity
-    const beamOp = sNorm > 0.3 ? 0.015 : 0.01 + Math.random() * 0.015;
-    coneGroup.children.forEach((c,i) => { c.material.opacity = beamOp - i * 0.002; });
+    const beamOp = sNorm > 0.3 ? 0.07 : 0.04 + Math.random() * 0.04;
+    coneGroup.children.forEach((c,i) => { c.material.opacity = beamOp - i * 0.01; });
   }
 
   // ── Water ──
