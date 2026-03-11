@@ -275,21 +275,86 @@ canvas { display: block; }
   0%, 100% { opacity: 0.3; }
   50% { opacity: 0.8; }
 }
+
+/* Mode selector */
+#mode-select {
+  display: flex; gap: 12px; margin-top: 1.5em; margin-bottom: 1em;
+}
+#mode-select button {
+  background: transparent; border: 1px solid #333;
+  color: #555; padding: 10px 18px; font-family: 'Courier New', monospace;
+  font-size: 0.8em; cursor: pointer; letter-spacing: 1px;
+  transition: all 0.3s; min-width: 120px;
+}
+#mode-select button:hover { border-color: #666; color: #888; }
+#mode-select button.selected { border-color: #888; color: #aaa; background: rgba(255,255,255,0.03); }
+#mode-select .mode-desc {
+  color: #2a2a2a; font-size: 0.65em; margin-top: 4px; line-height: 1.4;
+}
+
+/* Volume control */
+#volume-control {
+  position: fixed; bottom: 70px; left: 30px; z-index: 20;
+  background: rgba(0,0,0,0.85); border: 1px solid rgba(255,255,255,0.1);
+  padding: 10px 15px; display: none; font-family: 'Courier New', monospace;
+  color: #666; font-size: 11px; letter-spacing: 1px;
+  pointer-events: auto;
+}
+#volume-control input[type=range] {
+  width: 150px; accent-color: #555; margin-top: 4px; display: block;
+}
+
+/* Mobile blocker */
+#mobile-block {
+  position: fixed; inset: 0; z-index: 10000; background: #000;
+  display: none; flex-direction: column;
+  align-items: center; justify-content: center;
+  color: #444; font-family: 'Courier New', monospace;
+  text-align: center; padding: 40px; line-height: 2;
+  font-size: 14px; letter-spacing: 1px;
+}
 </style>
 </head>
 <body>
 
+<div id="mobile-block">
+  This experience requires a keyboard and mouse.<br>
+  Mobile devices are not supported.<br><br>
+  Please visit on a desktop computer.
+</div>
+
 <div id="blocker">
   <h1 id="game-title">The Static Between Walls</h1>
   <div class="tagline" id="game-tagline">"The building remembers everyone who enters."</div>
+
+  <div id="mode-select">
+    <button id="mode-explorer" onclick="selectMode('explorer')">
+      EXPLORER
+      <div class="mode-desc">No scares. Just explore<br>the building.</div>
+    </button>
+    <button id="mode-normal" class="selected" onclick="selectMode('normal')">
+      NORMAL
+      <div class="mode-desc">The intended<br>experience.</div>
+    </button>
+    <button id="mode-nightmare" onclick="selectMode('nightmare')">
+      NIGHTMARE
+      <div class="mode-desc">Aggressive Tenant.<br>Good luck.</div>
+    </button>
+  </div>
+
   <p id="continue-btn">Press ENTER to enter Blackridge Complex</p>
   <div class="controls">
     WASD — Move &nbsp;&nbsp; Mouse — Look &nbsp;&nbsp; SHIFT — Sprint<br>
     F — Flashlight &nbsp;&nbsp; R — Radio Scanner &nbsp;&nbsp; E — Interact<br>
-    Scroll — Tune Radio Frequency
+    V — Volume &nbsp;&nbsp; Scroll — Tune Radio Frequency
   </div>
   <div class="warn">HEADPHONES RECOMMENDED</div>
   <div class="tenant-silhouette" id="tenant-silhouette"></div>
+</div>
+
+<div id="volume-control">
+  VOLUME [V]
+  <input type="range" id="volume-slider" min="0" max="100" value="70">
 </div>
 
 <div id="vignette"></div>
@@ -375,17 +440,83 @@ const fourthWall = {
   totalPlaytime: 0,
   quickTurns: 0,
   doorsOpened: 0,
-  timesHid: 0, // standing still in dark
+  timesHid: 0,
   hidTimer: 0,
   lastMouseMoveTime: 0,
   hasBeenCrashed: false,
   hasSaveCorrupted: false,
-  tenantAwareness: 0, // 0–100, how much the Tenant "knows"
+  tenantAwareness: 0,
   predictedActions: [],
   lastTurnRate: 0,
   titleCorrupted: false,
   menuVisits: 0,
 };
+
+// ════════════════════════════════════════
+// GAME MODES
+// ════════════════════════════════════════
+// explorer: no enemies, no scares, no fourth wall, brighter lights
+// normal: default experience
+// nightmare: faster events, more aggressive tenant, sanity drains faster
+const modeSettings = {
+  explorer: {
+    horrorEvents: false,
+    fourthWall: false,
+    watcherEnabled: false,
+    sanityDrain: 0,
+    sanityRecovery: 1,
+    eventInterval: Infinity,
+    lightMultiplier: 2.0,
+    fogDensity: 0.03,
+    tenantSpeaks: false,
+    label: "Explorer Mode — No scares. Take your time.",
+  },
+  normal: {
+    horrorEvents: true,
+    fourthWall: true,
+    watcherEnabled: true,
+    sanityDrain: 1,
+    sanityRecovery: 0.15,
+    eventInterval: 22,
+    lightMultiplier: 1.0,
+    fogDensity: 0.055,
+    tenantSpeaks: true,
+    label: "Blackridge Complex — Floor 1\n\nFind your friend. Get out.",
+  },
+  nightmare: {
+    horrorEvents: true,
+    fourthWall: true,
+    watcherEnabled: true,
+    sanityDrain: 2.5,
+    sanityRecovery: 0.05,
+    eventInterval: 10,
+    lightMultiplier: 0.5,
+    fogDensity: 0.08,
+    tenantSpeaks: true,
+    label: "Blackridge Complex — Floor 1\n\nYou shouldn't have chosen this.",
+  }
+};
+
+let gameMode = 'normal';
+let mode = modeSettings.normal;
+
+// Mode selection (called from HTML onclick)
+window.selectMode = function(m) {
+  gameMode = m;
+  mode = modeSettings[m];
+  document.querySelectorAll('#mode-select button').forEach(b => b.classList.remove('selected'));
+  document.getElementById('mode-' + m).classList.add('selected');
+};
+
+// ════════════════════════════════════════
+// MOBILE DETECTION
+// ════════════════════════════════════════
+if (('ontouchstart' in window || navigator.maxTouchPoints > 0) &&
+    window.matchMedia('(pointer: coarse)').matches &&
+    window.innerWidth < 1024) {
+  document.getElementById('mobile-block').style.display = 'flex';
+  document.getElementById('blocker').style.display = 'none';
+}
 
 // ════════════════════════════════════════
 // AUDIO ENGINE
@@ -590,6 +721,7 @@ function playWaterDrip() {
 
 // Tenant voice — deeper whisper with specific text
 function playTenantVoice(text) {
+  if (!mode.tenantSpeaks) return;
   playWhisper();
   playStaticBurst(0.5, 0.1);
   showTenantWhisper(text);
@@ -1215,22 +1347,31 @@ function showTenantWhisper(text) {
 }
 
 function triggerFakeCrash() {
-  if (fourthWall.hasBeenCrashed) return;
+  if (fourthWall.hasBeenCrashed || !mode.fourthWall) return;
   fourthWall.hasBeenCrashed = true;
 
   controls.unlock();
   fakeCrashEl.style.display = 'flex';
   document.body.style.cursor = 'default';
 
-  // After a pause, the Tenant speaks
+  // Disable button until tenant speaks
+  crashOkBtn.disabled = true;
+  crashOkBtn.style.opacity = '0.3';
+  crashOkBtn.style.cursor = 'not-allowed';
+
   setTimeout(() => {
     crashTenantText.textContent = "...I didn't say you could leave.";
     crashTenantText.style.opacity = 1;
     playWhisper();
+    // Now enable the button
+    crashOkBtn.disabled = false;
+    crashOkBtn.style.opacity = '1';
+    crashOkBtn.style.cursor = 'pointer';
   }, 3000);
 
   crashOkBtn.addEventListener('click', () => {
-    // Button doesn't work at first
+    if (crashOkBtn.disabled) return;
+    crashOkBtn.disabled = true;
     crashOkBtn.textContent = "OK";
     setTimeout(() => {
       crashTenantText.textContent = "There is no 'OK.'";
@@ -1284,7 +1425,7 @@ document.addEventListener('visibilitychange', () => {
     fourthWall.tenantAwareness += 5;
   } else {
     // Player returned
-    if (fourthWall.tabAways > 0 && controls.isLocked) {
+    if (fourthWall.tabAways > 0 && controls.isLocked && mode.fourthWall) {
       const quotes = tenantQuotes.tabReturn;
       const quote = quotes[Math.floor(Math.random() * quotes.length)];
       setTimeout(() => {
@@ -1336,7 +1477,7 @@ controls.addEventListener('lock', () => {
 // HORROR EVENT SYSTEM
 // ════════════════════════════════════════
 function scheduleEvent() {
-  const baseInterval = Math.max(6, 22 - (100 - sanity) * 0.2 - fourthWall.tenantAwareness * 0.1);
+  const baseInterval = Math.max(4, mode.eventInterval - (100 - sanity) * 0.2 - fourthWall.tenantAwareness * 0.1);
   nextEventTime = gameTime + baseInterval + Math.random() * 12;
 }
 
@@ -1435,11 +1576,13 @@ const horrorEvents = [
 
 function triggerRandomEvent() {
   // Guarantee fourth-wall events trigger after enough time/awareness
-  if (!fourthWall.hasBeenCrashed && gameTime > 60 && fourthWall.tenantAwareness > 15) {
-    triggerFakeCrash(); scheduleEvent(); return;
-  }
-  if (!fourthWall.hasSaveCorrupted && gameTime > 120 && fourthWall.tenantAwareness > 25) {
-    triggerSaveCorrupt(); scheduleEvent(); return;
+  if (mode.fourthWall) {
+    if (!fourthWall.hasBeenCrashed && gameTime > 60 && fourthWall.tenantAwareness > 15) {
+      triggerFakeCrash(); scheduleEvent(); return;
+    }
+    if (!fourthWall.hasSaveCorrupted && gameTime > 120 && fourthWall.tenantAwareness > 25) {
+      triggerSaveCorrupt(); scheduleEvent(); return;
+    }
   }
   const event = horrorEvents[Math.floor(Math.random() * horrorEvents.length)];
   event();
@@ -1543,7 +1686,12 @@ controls.addEventListener('lock', () => {
   if (!gameStarted) {
     gameStarted = true;
     startAmbientDrone();
-    setTimeout(() => showMessage("Blackridge Complex — Floor 1\n\nFind your friend. Get out."), 1000);
+    // Apply mode settings to lights and fog
+    flickerLights.forEach(fl => {
+      if (!fl.broken) fl.light.intensity = fl.baseIntensity * mode.lightMultiplier;
+    });
+    scene.fog.density = mode.fogDensity;
+    setTimeout(() => showMessage(mode.label), 1000);
   }
 });
 controls.addEventListener('unlock', () => {
@@ -1571,7 +1719,17 @@ document.addEventListener('keydown', (e) => {
       if(radioActive){playStaticBurst(0.2,0.08);showSubtitle("Radio scanner active");}
       break;
     case 'KeyE': tryInteract(); break;
+    case 'KeyV':
+      const volCtrl = document.getElementById('volume-control');
+      volCtrl.style.display = volCtrl.style.display === 'block' ? 'none' : 'block';
+      volCtrl.style.pointerEvents = 'auto';
+      break;
   }
+});
+
+// Volume slider
+document.getElementById('volume-slider').addEventListener('input', (e) => {
+  masterGain.gain.value = e.target.value / 100;
 });
 
 document.addEventListener('keyup', (e) => {
@@ -1750,10 +1908,10 @@ function animate() {
     nearestLight = Math.min(nearestLight, camera.position.distanceTo(fl.light.position));
   }
   inDarkness = THREE.MathUtils.lerp(inDarkness, nearestLight>6?1:0, delta);
-  if(inDarkness>0.5 && !flashlightOn) sanity -= delta*3;
+  if(inDarkness>0.5 && !flashlightOn) sanity -= delta*3*mode.sanityDrain;
 
   // ── Sanity ──
-  sanity = Math.max(0, Math.min(100, sanity+delta*0.15));
+  sanity = Math.max(0, Math.min(100, sanity+delta*mode.sanityRecovery));
   const sN = sanity/100;
   sanityOverlay.style.opacity = (1-sN)*0.6;
   if(sanity<50) {
@@ -1796,7 +1954,7 @@ function animate() {
   }
   // Darkness via CSS overlay
   document.getElementById('vignette').style.opacity=flashlightOn?0.7:0.9+inDarkness*0.1;
-  scene.fog.density=0.055+(1-sN)*0.03;
+  scene.fog.density=mode.fogDensity+(1-sN)*0.03*mode.sanityDrain;
 
   // ── Radio ──
   if(radioActive) {
@@ -1807,7 +1965,7 @@ function animate() {
   }
 
   // ── Events ──
-  if(gameTime>nextEventTime) triggerRandomEvent();
+  if(mode.horrorEvents && gameTime>nextEventTime) triggerRandomEvent();
 
   // ── Environmental sounds ──
   environmentalSounds.forEach(s=>{
@@ -1820,7 +1978,7 @@ function animate() {
   if(Math.random()<0.001) playCreak();
 
   // ── Watcher AI ──
-  if(watcherState==='hidden') {
+  if(watcherState==='hidden' && mode.watcherEnabled) {
     watcherTimer-=delta;
     if(watcherTimer<=0) {
       watcherState='appearing'; watcherGroup.visible=true; watcherOpacity=0;
