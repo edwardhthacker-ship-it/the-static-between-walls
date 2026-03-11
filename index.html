@@ -467,7 +467,7 @@ const modeSettings = {
     sanityDrain: 0,
     sanityRecovery: 1,
     eventInterval: Infinity,
-    lightMultiplier: 2.0,
+    lightMultiplier: 4.0,
     fogDensity: 0.03,
     tenantSpeaks: false,
     label: "Explorer Mode — No scares. Take your time.",
@@ -739,7 +739,7 @@ const camera = new THREE.PerspectiveCamera(68, window.innerWidth / window.innerH
 camera.position.set(0, 1.65, 1);
 
 // Ambient light — keeps things visible, sanity system dims it
-const ambientLight = new THREE.AmbientLight(0x888899, 0.15);
+const ambientLight = new THREE.AmbientLight(0x888899, 0.02);
 scene.add(ambientLight);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
@@ -931,7 +931,7 @@ function addFluorescentLight(x,z,intensity=1.2,color=0xffe8cc) {
     new THREE.MeshBasicMaterial({color,transparent:true,opacity:intensity*0.06,side:THREE.DoubleSide,depthWrite:false}));
   glow.rotation.x=Math.PI/2; glow.position.set(x,2.92,z); scene.add(glow);
 
-  const light = new THREE.PointLight(color,intensity,10,2);
+  const light = new THREE.PointLight(color,intensity*2.5,6,2);
   light.position.set(x,2.85,z); light.castShadow=false;
   scene.add(light);
 
@@ -1187,34 +1187,86 @@ addPipe(1.1, 2.9, -2, 1.1, 2.9, -SEGMENTS*5+3, 0.02);
 
 // ─── HALLWAY DETAILS (quality) ───
 const bbMat = new THREE.MeshStandardMaterial({color:0x1a1008, roughness:0.8});
-// Baseboards along both hallway walls
+const dadoMat = new THREE.MeshStandardMaterial({color:0x2a2018, roughness:0.75, metalness:0.05});
+// Baseboards + dado rail along both hallway walls
 for (let i = 0; i < SEGMENTS; i++) {
   const z = -i*5;
   for (const sx of [-1,1]) {
     const bx = sx * (HALL_WIDTH/2 - 0.03);
-    // Check if this segment/side has a doorway — skip baseboard there
     const hasDoor = doorwayDefs.some(d => d.seg === i && d.side === (sx>0?'right':'left'));
     if (!hasDoor) {
+      // Baseboard
       const bb = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.1, 5), bbMat);
       bb.position.set(bx, 0.05, z); scene.add(bb);
+      // Dado rail at 0.9m — thin horizontal trim that breaks up flat walls
+      const dado = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.04, 5), dadoMat);
+      dado.position.set(bx, 0.9, z); scene.add(dado);
+    } else {
+      // Split dado rail around doorway
+      const dw = doorwayDefs.find(d => d.seg === i && d.side === (sx>0?'right':'left'));
+      const gapTop = dw.doorZ + DOOR_GAP_W/2, gapBot = dw.doorZ - DOOR_GAP_W/2;
+      const segTop = z+2.5, segBot = z-2.5;
+      const tLen = segTop - gapTop;
+      if (tLen > 0.1) {
+        const d1 = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.04, tLen), dadoMat);
+        d1.position.set(bx, 0.9, gapTop+tLen/2); scene.add(d1);
+      }
+      const bLen = gapBot - segBot;
+      if (bLen > 0.1) {
+        const d2 = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.04, bLen), dadoMat);
+        d2.position.set(bx, 0.9, segBot+bLen/2); scene.add(d2);
+      }
     }
   }
 }
 // Random floor stains
 const stainMat = new THREE.MeshStandardMaterial({color:0x0a0805,roughness:1,transparent:true,opacity:0.3});
-for (let i = 0; i < 8; i++) {
-  const s = new THREE.Mesh(new THREE.CircleGeometry(0.15+Math.random()*0.3, 12), stainMat);
+for (let i = 0; i < 12; i++) {
+  const s = new THREE.Mesh(new THREE.CircleGeometry(0.1+Math.random()*0.25, 10), stainMat);
   s.rotation.x = -Math.PI/2;
-  s.position.set((Math.random()-0.5)*2, 0.002, -Math.random()*SEGMENTS*5);
+  s.position.set((Math.random()-0.5)*2.2, 0.002, -Math.random()*SEGMENTS*5);
   scene.add(s);
 }
 // Ceiling stains (water damage)
 const cStainMat = new THREE.MeshStandardMaterial({color:0x151210,roughness:1,transparent:true,opacity:0.25});
-for (let i = 0; i < 5; i++) {
-  const s = new THREE.Mesh(new THREE.CircleGeometry(0.2+Math.random()*0.4, 10), cStainMat);
+for (let i = 0; i < 6; i++) {
+  const s = new THREE.Mesh(new THREE.CircleGeometry(0.2+Math.random()*0.5, 10), cStainMat);
   s.rotation.x = Math.PI/2;
   s.position.set((Math.random()-0.5)*2, 2.998, -2-Math.random()*SEGMENTS*4);
   scene.add(s);
+}
+// Fallen ceiling tiles and debris on floor
+const debrisMat = new THREE.MeshStandardMaterial({color:0x1f1e1c, roughness:0.95});
+const debrisMat2 = new THREE.MeshStandardMaterial({color:0x151210, roughness:0.9});
+for (let i = 0; i < 10; i++) {
+  // Fallen ceiling tile — flat rectangle at random angle
+  const tile = new THREE.Mesh(
+    new THREE.BoxGeometry(0.4+Math.random()*0.3, 0.02, 0.3+Math.random()*0.2),
+    Math.random()>0.5 ? debrisMat : debrisMat2
+  );
+  tile.position.set(
+    (Math.random()-0.5)*2,
+    0.01,
+    -3-Math.random()*(SEGMENTS*5-6)
+  );
+  tile.rotation.y = Math.random()*Math.PI;
+  tile.rotation.x = (Math.random()-0.5)*0.3; // slightly tilted
+  scene.add(tile);
+}
+// Small rubble pieces
+for (let i = 0; i < 20; i++) {
+  const size = 0.03+Math.random()*0.08;
+  const rubble = new THREE.Mesh(
+    new THREE.BoxGeometry(size, size*0.5, size*(0.5+Math.random())),
+    debrisMat2
+  );
+  rubble.position.set(
+    (Math.random()-0.5)*2.5,
+    size*0.25,
+    -2-Math.random()*(SEGMENTS*5-4)
+  );
+  rubble.rotation.set(Math.random()*0.5, Math.random()*Math.PI, Math.random()*0.3);
+  scene.add(rubble);
 }
 
 // ─── APARTMENTS ───
@@ -1366,7 +1418,7 @@ interactables.push({
 // ════════════════════════════════════════
 // FLASHLIGHT
 // ════════════════════════════════════════
-const flashlight = new THREE.SpotLight(0xfff0dd, 15, 40, Math.PI/5, 0.4, 1.0);
+const flashlight = new THREE.SpotLight(0xfff0dd, 28, 35, Math.PI/7, 0.5, 1.2);
 flashlight.castShadow = false;
 camera.add(flashlight); camera.add(flashlight.target);
 flashlight.position.set(0.2,-0.1,-0.2);
@@ -1381,7 +1433,7 @@ const coneLength = 10;
 const coneGroup = new THREE.Group();
 // Stack 5 cones for visible volumetric beam
 for (let i = 0; i < 5; i++) {
-  const r = Math.tan(Math.PI/5) * coneLength * (0.5 + i * 0.12);
+  const r = Math.tan(Math.PI/7) * coneLength * (0.5 + i * 0.12);
   const geo = new THREE.ConeGeometry(r, coneLength, 24, 1, true);
   geo.translate(0, -coneLength/2, 0);
   geo.rotateX(Math.PI/2);
@@ -2112,7 +2164,7 @@ function animate() {
   const flickerChance = sNorm > 0.7 ? 0 : sNorm > 0.4 ? 0.3 : sNorm > 0.15 ? 0.7 : 1;
 
   // Ambient light dims with sanity
-  ambientLight.intensity = 0.15 * sNorm * mode.lightMultiplier;
+  ambientLight.intensity = 0.02 * sNorm * mode.lightMultiplier;
 
   for(const fl of flickerLights) {
     if(fl.broken && !mode.horrorEvents){fl.light.intensity=fl.baseIntensity*mode.lightMultiplier;continue;}
@@ -2277,22 +2329,51 @@ function animate() {
       const look = new THREE.Vector3(); camera.getWorldDirection(look);
       const dot = look.dot(toG);
       if (dot > 0.5 && glimpseMat.opacity > 0.2) {
-        // Player sees it — it runs away
+        // Player sees it — it flees but leaves a mark
         glimpseState = 'fleeing';
-        playCreak(); // startling sound
+        playCreak();
+        // Kill the nearest light when spotted
+        let nearestFL = null, nearestDist = 999;
+        flickerLights.forEach(fl => {
+          if(!fl.broken) {
+            const d = glimpseGroup.position.distanceTo(fl.light.position);
+            if(d < nearestDist) { nearestDist = d; nearestFL = fl; }
+          }
+        });
+        if(nearestFL && nearestDist < 8) {
+          nearestFL.broken = true; nearestFL.light.intensity = 0;
+          nearestFL.glow.material.opacity = 0;
+        }
       }
-      // Subtle idle sway
+      // Subtle idle sway + twitching
       glimpseGroup.position.y += Math.sin(gameTime*2)*delta*0.1;
+      if(Math.random() < 0.02) {
+        glimpseGroup.position.x += (Math.random()-0.5)*0.3;
+      }
     } else if (glimpseState === 'fleeing') {
       // Sprint away from player
       const away = new THREE.Vector3().subVectors(glimpseGroup.position, camera.position);
       away.y = 0; away.normalize();
-      glimpseGroup.position.addScaledVector(away, delta*12);
-      glimpseMat.opacity -= delta*1.2;
+      glimpseGroup.position.addScaledVector(away, delta*14);
+      glimpseMat.opacity -= delta*1.0;
+      // Leave a stain where it was standing
+      if(glimpseMat.opacity < 0.3 && !glimpseGroup.userData.leftMark) {
+        glimpseGroup.userData.leftMark = true;
+        const mark = new THREE.Mesh(
+          new THREE.CircleGeometry(0.25, 8),
+          new THREE.MeshStandardMaterial({color:0x0a0510,roughness:1,transparent:true,opacity:0.4})
+        );
+        mark.rotation.x = -Math.PI/2;
+        mark.position.set(glimpseGroup.position.x, 0.003, glimpseGroup.position.z);
+        scene.add(mark);
+      }
       if (glimpseMat.opacity <= 0) {
         glimpseState = 'hidden'; glimpseGroup.visible = false;
-        glimpseTimer = 30 + Math.random()*40;
-        sanity -= 3; // unsettling
+        glimpseGroup.userData.leftMark = false;
+        glimpseTimer = 25 + Math.random()*35;
+        sanity -= 5;
+        // Whisper after it vanishes
+        setTimeout(() => { if(mode.horrorEvents) playWhisper(); }, 1500);
       }
     }
   }
