@@ -1240,46 +1240,27 @@ const flashFill = new THREE.PointLight(0xfff0dd, 0.5, 10);
 flashFill.position.set(0, 0, -0.5);
 camera.add(flashFill);
 
-// Volumetric light cone — visible beam in the air
-const coneLength = 14;
-const coneRadius = Math.tan(Math.PI/5) * coneLength;
-const coneGeo = new THREE.ConeGeometry(coneRadius, coneLength, 32, 1, true);
-coneGeo.translate(0, -coneLength/2, 0);
-coneGeo.rotateX(Math.PI/2);
-const coneMat = new THREE.ShaderMaterial({
-  transparent: true,
-  depthWrite: false,
-  side: THREE.DoubleSide,
-  uniforms: {
-    color: { value: new THREE.Color(0xfff0dd) },
-    opacity: { value: 0.04 },
-  },
-  vertexShader: `
-    varying vec3 vPos;
-    void main() {
-      vPos = position;
-      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-    }
-  `,
-  fragmentShader: `
-    uniform vec3 color;
-    uniform float opacity;
-    varying vec3 vPos;
-    void main() {
-      // Fade out toward edges and tip
-      float dist = length(vPos.xy) / (abs(vPos.z) * 0.6 + 0.5);
-      float fade = 1.0 - smoothstep(0.0, 1.0, dist);
-      // Fade along beam length
-      float zFade = smoothstep(0.0, 1.0, -vPos.z / ${coneLength.toFixed(1)});
-      float alpha = fade * (1.0 - zFade * 0.7) * opacity;
-      gl_FragColor = vec4(color, alpha);
-    }
-  `
+// Volumetric light cone — visible beam using layered transparent cones
+const coneLength = 12;
+const coneMat = new THREE.MeshBasicMaterial({
+  color: 0xfff0dd, transparent: true, opacity: 0.02,
+  side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending
 });
-const coneMesh = new THREE.Mesh(coneGeo, coneMat);
-coneMesh.position.copy(flashlight.position);
-coneMesh.renderOrder = 999;
-camera.add(coneMesh);
+const coneGroup = new THREE.Group();
+// Stack 4 cones for soft volumetric look
+for (let i = 0; i < 4; i++) {
+  const r = Math.tan(Math.PI/5) * coneLength * (0.6 + i * 0.15);
+  const geo = new THREE.ConeGeometry(r, coneLength, 16, 1, true);
+  geo.translate(0, -coneLength/2, 0);
+  geo.rotateX(Math.PI/2);
+  const mat = coneMat.clone();
+  mat.opacity = 0.015 - i * 0.002;
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.renderOrder = 999;
+  coneGroup.add(mesh);
+}
+coneGroup.position.copy(flashlight.position);
+camera.add(coneGroup);
 
 // Dust particles in beam
 const dustCount = 60;
@@ -1780,7 +1761,7 @@ document.addEventListener('keydown', (e) => {
     case 'KeyF':
       flashlightOn=!flashlightOn;
       flashlight.visible=flashlightOn; flashFill.visible=flashlightOn;
-      coneMesh.visible=flashlightOn; dustParticles.visible=flashlightOn;
+      coneGroup.visible=flashlightOn; dustParticles.visible=flashlightOn;
       if(!flashlightOn) showSubtitle("Flashlight off"); break;
     case 'KeyR':
       radioActive=!radioActive;
@@ -2132,7 +2113,9 @@ function animate() {
     }
     pos.needsUpdate = true;
     // Beam opacity flickers slightly at low sanity
-    coneMat.uniforms.opacity.value = sNorm > 0.3 ? 0.04 : 0.04 + Math.random() * 0.02;
+    // Beam flickers at low sanity
+    const beamOp = sNorm > 0.3 ? 0.015 : 0.01 + Math.random() * 0.015;
+    coneGroup.children.forEach((c,i) => { c.material.opacity = beamOp - i * 0.002; });
   }
 
   // ── Water ──
