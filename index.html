@@ -733,17 +733,21 @@ function playTenantVoice(text) {
 // ════════════════════════════════════════
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x020202);
-scene.fog = new THREE.FogExp2(0x020202, 0.06);
+scene.fog = new THREE.FogExp2(0x020202, 0.035);
 
 const camera = new THREE.PerspectiveCamera(68, window.innerWidth / window.innerHeight, 0.05, 80);
 camera.position.set(0, 1.65, 1);
+
+// Ambient light — keeps things visible, sanity system dims it
+const ambientLight = new THREE.AmbientLight(0x888899, 0.15);
+scene.add(ambientLight);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.shadowMap.enabled = false;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 0.5;
+renderer.toneMappingExposure = 0.85;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 document.body.appendChild(renderer.domElement);
 
@@ -1091,9 +1095,9 @@ for (let i = 0; i < SEGMENTS; i++) {
   addFloor(0,z,HALL_WIDTH,5); addCeiling(0,z,HALL_WIDTH,5);
   addWall(-HALL_WIDTH/2, WH/2, z, 0.12, WH, 5, wallMatA);
   addWall(HALL_WIDTH/2, WH/2, z, 0.12, WH, 5, wallMatA);
-  if (i > 0) addFluorescentLight(0, z, 0.8 + Math.random()*0.6);
+  if (i > 0) addFluorescentLight(0, z, 1.8 + Math.random()*0.5);
 }
-addFluorescentLight(0, 0, 1.5);
+addFluorescentLight(0, 0, 2.5);
 addWall(0, WH/2, -SEGMENTS*5+2.5, HALL_WIDTH, WH, 0.12);
 addPipe(-1.2, 2.85, -1, -1.2, 2.85, -SEGMENTS*5+3, 0.04);
 addPipe(1.1, 2.9, -2, 1.1, 2.9, -SEGMENTS*5+3, 0.02);
@@ -1111,7 +1115,7 @@ function buildApartment(aptX, aptZ, side, matW, floorM, opts={}) {
 
 // Apt 101
 buildApartment(4.5, -4, 'right', wallMatB, floorMatWood);
-addFluorescentLight(4.5, -4, 0.7);
+addFluorescentLight(4.5, -4, 1.8);
 addTable(4, -4); addRadio(4.2, 0.74, -4); addChair(4, -3.2, Math.PI);
 addNote(7.4, 1.3, -4, "Day 14: The hallways keep changing. I swear room 103 was on the left yesterday. The wallpaper peels in patterns that look like faces.\n\nI found Sarah's watch today. She went missing three days ago.", -Math.PI/2);
 const shelf = new THREE.Mesh(new THREE.BoxGeometry(0.8,1.8,0.3), new THREE.MeshStandardMaterial({color:0x1a1008,roughness:0.8}));
@@ -1119,7 +1123,7 @@ shelf.position.set(6.5, 0.9, -5.8); shelf.castShadow=true; scene.add(shelf); col
 
 // Apt 102
 buildApartment(-4.5, -9, 'left', wallMatC, floorMatWood, {open:true});
-addFluorescentLight(-4.5, -9, 0.35);
+addFluorescentLight(-4.5, -9, 1.5);
 const overChair = addChair(-3.5, -10); overChair.rotation.z = Math.PI/2; overChair.position.y = 0.2;
 addTable(-5.5, -8.5, 0.7, 0.4);
 addNote(-5.5, 0.76, -8.3, "TO ANYONE WHO FINDS THIS:\n\nDo NOT go to the basement. The radio signals — they're not signals. They're a voice. It calls itself 'The Tenant.'\n\nIt knows things about you. Things you haven't told anyone.\n\nLeave. NOW.", 0);
@@ -1128,13 +1132,13 @@ stain.rotation.x=-Math.PI/2; stain.position.set(-4, 0.005, -9.5); scene.add(stai
 
 // Apt 103 — Mirror room
 buildApartment(4.5, -14, 'right', wallMatB, floorMatTile);
-addFluorescentLight(4.5, -14, 0.25);
+addFluorescentLight(4.5, -14, 1.5);
 addMirror(7.4, 1.5, -14, 0.9, 1.3, -Math.PI/2);
 addMirror(2.5, 1.5, -16.4, 0.7, 1.0, 0);
 
 // Apt 104 — Flooded
 buildApartment(-4.5, -19, 'left', wallMatA, floorMatConcrete, {open:true});
-addFluorescentLight(-4.5, -19, 0.15, 0xccddff);
+addFluorescentLight(-4.5, -19, 1.3, 0xccddff);
 const water = new THREE.Mesh(new THREE.PlaneGeometry(5.8,4.8),
   new THREE.MeshStandardMaterial({color:0x0a1520,metalness:0.7,roughness:0.05,transparent:true,opacity:0.5}));
 water.rotation.x=-Math.PI/2; water.position.set(-4.5, 0.03, -19); scene.add(water);
@@ -1142,7 +1146,7 @@ environmentalSounds.push({type:'drip',x:-4.5,z:-19,timer:0,interval:2+Math.rando
 
 // Apt 105
 buildApartment(4.5, -24, 'right', wallMatA, floorMatWood);
-addFluorescentLight(4.5, -24, 0.6);
+addFluorescentLight(4.5, -24, 1.6);
 addNote(4.5, 1.3, -26.4, "Have you noticed the numbers on the doors?\n\nThey change every time I look away.\n\nI've been counting. This is my 47th day.\nOr is it my 470th?\n\nTime doesn't work here.", 0);
 
 // Door numbers
@@ -1168,7 +1172,7 @@ for (let i = 0; i < 5; i++) {
   addFloor(0,z,2.2,4,floorMatConcrete); addCeiling(0,z,2.2,4);
   addWall(-1.1,WH/2,z,0.12,WH,4,wallMatB);
   addWall(1.1,WH/2,z,0.12,WH,4,wallMatB);
-  if(i%2===0) addFluorescentLight(0,z,0.2,0xffccaa);
+  if(i%2===0) addFluorescentLight(0,z,1.0,0xffccaa);
 }
 
 // Stairs
@@ -1226,11 +1230,15 @@ interactables.push({
 // ════════════════════════════════════════
 // FLASHLIGHT
 // ════════════════════════════════════════
-const flashlight = new THREE.SpotLight(0xfff0dd, 3, 25, Math.PI/7, 0.35, 1.5);
+const flashlight = new THREE.SpotLight(0xfff0dd, 5, 30, Math.PI/5, 0.3, 1.2);
 flashlight.castShadow = false;
 camera.add(flashlight); camera.add(flashlight.target);
-flashlight.position.set(0.25,-0.15,-0.3);
-flashlight.target.position.set(0,0,-6);
+flashlight.position.set(0.2,-0.1,-0.2);
+flashlight.target.position.set(0,0,-8);
+// Add a subtle ambient fill so flashlight doesn't look flat
+const flashFill = new THREE.PointLight(0xfff0dd, 0.3, 8);
+flashFill.position.set(0, 0, -0.5);
+camera.add(flashFill);
 scene.add(camera);
 let flashlightOn = true;
 
@@ -1712,7 +1720,7 @@ document.addEventListener('keydown', (e) => {
     case 'KeyD': case 'ArrowRight': moveRight=true; break;
     case 'ShiftLeft': case 'ShiftRight': isSprinting=true; break;
     case 'KeyF':
-      flashlightOn=!flashlightOn; flashlight.visible=flashlightOn;
+      flashlightOn=!flashlightOn; flashlight.visible=flashlightOn; flashFill.visible=flashlightOn;
       if(!flashlightOn) showSubtitle("Flashlight off"); break;
     case 'KeyR':
       radioActive=!radioActive;
@@ -1885,23 +1893,43 @@ function animate() {
     if(Math.abs(diff)>0.01) { d.currentAngle+=diff*delta*4; d.mesh.rotation.y=d.currentAngle; }
   });
 
-  // ── Flickering lights ──
+  // ── Sanity-driven lighting ──
+  // High sanity = bright, stable lights
+  // Mid sanity = occasional flickers
+  // Low sanity = aggressive flickering
+  // Very low = lights die, flashlight only
+  const sNorm = sanity / 100; // 1 = full sanity, 0 = insane
+  const sanityBrightness = sNorm > 0.3 ? sNorm : Math.max(0, sNorm * 2); // dims to 0 below 15 sanity
+  const flickerChance = sNorm > 0.7 ? 0 : sNorm > 0.4 ? 0.3 : sNorm > 0.15 ? 0.7 : 1;
+
+  // Ambient light dims with sanity
+  ambientLight.intensity = 0.15 * sNorm * mode.lightMultiplier;
+
   for(const fl of flickerLights) {
-    if(fl.broken && mode.horrorEvents)continue;
     if(fl.broken && !mode.horrorEvents){fl.light.intensity=fl.baseIntensity*mode.lightMultiplier;continue;}
+    if(fl.broken)continue;
     fl.timer += delta*fl.speed;
-    let flick=1;
-    if(mode.horrorEvents) {
-      if(fl.pattern==='erratic'){
+
+    let flick = 1;
+    if(mode.horrorEvents && flickerChance > 0) {
+      // Flicker intensity scales with insanity
+      if(fl.pattern==='erratic' || flickerChance > 0.5){
         const combined=Math.sin(fl.timer*23.7)*Math.sin(fl.timer*7.1)*Math.sin(fl.timer*31.3);
-        flick=combined>0.5?0.05:combined>0.2?0.4:1;
-      } else { flick=Math.sin(fl.timer*3)>0.9?0.1:1; }
+        const threshold = 0.8 - flickerChance * 0.7; // more insane = more flickers
+        flick = combined > threshold ? 0.05 : combined > threshold - 0.2 ? 0.3 : 1;
+      } else {
+        flick = Math.sin(fl.timer*3) > (1.2 - flickerChance * 0.5) ? 0.1 : 1;
+      }
     }
-    fl.light.intensity=fl.baseIntensity*flick*mode.lightMultiplier;
-    if(fl.glow) fl.glow.material.opacity=fl.baseIntensity*0.06*flick;
+
+    // Apply sanity brightness on top of flicker
+    fl.light.intensity = fl.baseIntensity * flick * sanityBrightness * mode.lightMultiplier;
+    if(fl.glow) fl.glow.material.opacity = fl.baseIntensity * 0.06 * flick * sanityBrightness;
     if(fl.buzzGain) {
       const dist=camera.position.distanceTo(fl.light.position);
-      fl.buzzGain.gain.value=Math.max(0,0.015*(1-dist/12))*(flick<0.5?2:0.5);
+      const buzzVol = Math.max(0, 0.015*(1-dist/12));
+      // Buzz gets louder and more erratic at low sanity
+      fl.buzzGain.gain.value = buzzVol * (flick < 0.5 ? 3 : 0.5) * (1 + (1-sNorm) * 2);
     }
   }
 
@@ -1943,18 +1971,19 @@ function animate() {
   heartbeatEl.querySelector('.bpm').style.opacity=sanity<50?1:0;
 
   // ── Visual effects (CSS-based) ──
+  // Base exposure: bright at high sanity, dim at low
+  const baseExposure = 0.5 + sNorm * 0.45; // 0.95 at full sanity, 0.5 at zero
   if(glitchTimer>0) {
     glitchTimer-=delta;
     const t=glitchTimer*glitchIntensity;
     updateStatic(t*0.3);
-    renderer.toneMappingExposure=0.5+(Math.random()-0.5)*t*0.3;
-    // CSS chromatic aberration
+    renderer.toneMappingExposure=baseExposure+(Math.random()-0.5)*t*0.3;
     renderer.domElement.style.filter=`saturate(${1+t*0.3}) contrast(${1+t*0.1})`;
   } else {
     updateStatic(0);
-    renderer.toneMappingExposure=THREE.MathUtils.lerp(renderer.toneMappingExposure,0.5,delta*2);
+    renderer.toneMappingExposure=THREE.MathUtils.lerp(renderer.toneMappingExposure,baseExposure,delta*2);
     glitchIntensity=0;
-    renderer.domElement.style.filter=`saturate(0.7) contrast(${1+(1-sN)*0.1})`;
+    renderer.domElement.style.filter=`saturate(${0.6+sNorm*0.4}) contrast(${1+(1-sNorm)*0.15})`;
   }
   // Darkness via CSS overlay
   document.getElementById('vignette').style.opacity=flashlightOn?0.7:0.9+inDarkness*0.1;
