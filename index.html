@@ -1507,7 +1507,100 @@ const scriptedEvents = {
   apt104Triggered: false,
   apt104WaterRising: false,
   apt104WaterLevel: 0.03,
+  // Looping hallway
+  loopCount: 0,
+  loopTriggerZ: -SEGMENTS*5 + 4, // near the end of the hallway
+  loopResetZ: 1, // back to start
+  loopCooldown: false,
+  // Hallway stretching (sanity < 40)
+  hallwayStretch: 0,
 };
+
+// ─── SHADOW WITH NO SOURCE ───
+// Fake human silhouette shadows on walls — no entity casting them
+const shadowTexCanvas = document.createElement('canvas');
+shadowTexCanvas.width = 64; shadowTexCanvas.height = 128;
+const sCtx = shadowTexCanvas.getContext('2d');
+sCtx.fillStyle = 'rgba(0,0,0,0)'; sCtx.fillRect(0,0,64,128);
+// Draw a rough human silhouette
+sCtx.fillStyle = 'rgba(0,0,0,1)';
+sCtx.beginPath();
+sCtx.ellipse(32, 15, 10, 12, 0, 0, Math.PI*2); sCtx.fill(); // head
+sCtx.fillRect(24, 27, 16, 45); // torso
+sCtx.fillRect(18, 30, 8, 35); // left arm
+sCtx.fillRect(38, 30, 8, 35); // right arm
+sCtx.fillRect(24, 72, 8, 50); // left leg
+sCtx.fillRect(32, 72, 8, 50); // right leg
+const shadowTex = new THREE.CanvasTexture(shadowTexCanvas);
+shadowTex.colorSpace = THREE.SRGBColorSpace;
+
+const fakeShadows = [];
+function addFakeShadow(x, y, z, rotY, scale=1) {
+  const m = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.5*scale, 1.2*scale),
+    new THREE.MeshBasicMaterial({
+      map: shadowTex, transparent: true, opacity: 0.35,
+      side: THREE.DoubleSide, depthWrite: false
+    })
+  );
+  m.position.set(x, y, z);
+  m.rotation.y = rotY;
+  m.visible = false; // starts hidden, appears contextually
+  scene.add(m);
+  fakeShadows.push(m);
+  return m;
+}
+// Place shadows at strategic points along hallway walls
+const fShadow1 = addFakeShadow(HALL_WIDTH/2-0.05, 1.0, -7, Math.PI/2, 1.2);
+const fShadow2 = addFakeShadow(-HALL_WIDTH/2+0.05, 0.9, -17, -Math.PI/2, 1.0);
+const fShadow3 = addFakeShadow(HALL_WIDTH/2-0.05, 1.1, -28, Math.PI/2, 0.9);
+
+// ─── PHOTOGRAPHS ON THE FLOOR (fourth wall) ───
+const photoObjects = [];
+function addPhotograph(x, z, label) {
+  const pc = document.createElement('canvas'); pc.width = 128; pc.height = 128;
+  const pCtx = pc.getContext('2d');
+  // White border (polaroid style)
+  pCtx.fillStyle = '#e8e4dc'; pCtx.fillRect(0,0,128,128);
+  // Dark interior — aerial view of hallway
+  pCtx.fillStyle = '#0a0a0a'; pCtx.fillRect(8,8,112,96);
+  // Draw simplified hallway layout from above
+  pCtx.fillStyle = '#1a1510';
+  pCtx.fillRect(48, 10, 32, 90); // hallway
+  // Rooms branching off
+  pCtx.fillStyle = '#151210';
+  pCtx.fillRect(80, 20, 30, 15); pCtx.fillRect(10, 35, 38, 15);
+  pCtx.fillRect(80, 50, 30, 15); pCtx.fillRect(10, 65, 38, 15);
+  pCtx.fillRect(80, 80, 30, 15);
+  // Red X marking position
+  pCtx.strokeStyle = '#cc0000'; pCtx.lineWidth = 3;
+  const xPos = 64, yPos = 10 + ((-z) / (SEGMENTS*5)) * 85;
+  pCtx.beginPath(); pCtx.moveTo(xPos-6, yPos-6); pCtx.lineTo(xPos+6, yPos+6); pCtx.stroke();
+  pCtx.beginPath(); pCtx.moveTo(xPos+6, yPos-6); pCtx.lineTo(xPos-6, yPos+6); pCtx.stroke();
+  // Label
+  pCtx.fillStyle = '#cc0000'; pCtx.font = '9px monospace';
+  pCtx.fillText('YOU ARE HERE', 30, 118);
+  const tex = new THREE.CanvasTexture(pc); tex.colorSpace = THREE.SRGBColorSpace;
+  const photo = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.15, 0.15),
+    new THREE.MeshStandardMaterial({map:tex, roughness:0.5})
+  );
+  photo.rotation.x = -Math.PI/2;
+  photo.rotation.z = (Math.random()-0.5)*0.4;
+  photo.position.set(x, 0.005, z);
+  scene.add(photo);
+  const p = { group: photo, mesh: photo, type: 'photo', interact: () => {
+    showMessage("A polaroid photo. It shows an aerial view of this hallway.\n\nThere's a red X marking... your exact position.\n\nThe photo is warm.");
+    sanity -= 3;
+    fourthWall.tenantAwareness += 5;
+  }};
+  interactables.push(p);
+  photoObjects.push(photo);
+}
+// Place photographs at key positions
+addPhotograph(0.5, -6, 'near apt 101');
+addPhotograph(-0.3, -16, 'near apt 103');
+addPhotograph(0.2, -27, 'near apt 105');
 
 // Wall crawler particles
 const crawlerParticles = [];
@@ -2250,7 +2343,7 @@ function animate() {
   }
   // Darkness via CSS overlay
   document.getElementById('vignette').style.opacity=flashlightOn?0.7:0.9+inDarkness*0.1;
-  scene.fog.density=mode.fogDensity+(1-sN)*0.03*mode.sanityDrain;
+  scene.fog.density=mode.fogDensity+(1-sN)*0.03*mode.sanityDrain+scriptedEvents.hallwayStretch;
 
   // ── Radio ──
   if(radioActive) {
@@ -2476,6 +2569,103 @@ function animate() {
     }
   }
 
+  // ── Looping Hallway ──
+  // When player reaches end of hallway, silently teleport back to start
+  // Each loop something is different
+  if (mode.horrorEvents && !scriptedEvents.loopCooldown) {
+    if (camera.position.z < scriptedEvents.loopTriggerZ && camera.position.y > 0) {
+      scriptedEvents.loopCooldown = true;
+      scriptedEvents.loopCount++;
+      const loop = scriptedEvents.loopCount;
+
+      // Teleport back to start during a brief glitch
+      triggerGlitch(0.3, 0.2);
+      camera.position.z = scriptedEvents.loopResetZ;
+
+      // Each loop, something changes
+      if (loop === 1) {
+        // A closed door is now open
+        if (doorObjects[0] && !doorObjects[0].isOpen) {
+          doorObjects[0].isOpen = true; doorObjects[0].targetAngle = -Math.PI/3;
+        }
+        showSubtitle("...didn't I just walk this way?");
+      } else if (loop === 2) {
+        // A note has moved — show a new note in the middle of the hallway
+        if (typeof addNote === 'function') {
+          addNote(0.3, 0.01, -5, "YOU KEEP WALKING.\n\nIT KEEPS GOING.\n\nI KEEP WATCHING.", 0);
+        }
+        playWhisper();
+      } else if (loop >= 3) {
+        // Things get wrong — swap door numbers, add a chair that wasn't there
+        const wrongChair = new THREE.Mesh(
+          new THREE.BoxGeometry(0.4, 0.4, 0.4),
+          new THREE.MeshStandardMaterial({color:0x2a1a0c,roughness:0.8})
+        );
+        wrongChair.position.set(
+          (Math.random()-0.5)*1.5,
+          0.2,
+          -2 - Math.random()*10
+        );
+        scene.add(wrongChair); colliders.push(wrongChair);
+
+        // Corrupt door numbers
+        const wrongNums = ['10?','1̷0̷1','---','R̵U̵N','105','101','???'];
+        document.querySelectorAll('.door-num-override').forEach(el => el.remove());
+
+        if (loop === 3) {
+          showSubtitle("The numbers are wrong.");
+          sanity -= 8;
+          playTenantVoice("You noticed.\nMost don't.\nMost don't get a third walk.");
+        } else if (loop >= 4) {
+          showSubtitle("Stop walking.");
+          sanity -= 12;
+          triggerGlitch(2, 1.5);
+        }
+      }
+
+      setTimeout(() => { scriptedEvents.loopCooldown = false; }, 3000);
+    }
+  }
+
+  // ── Sourceless Shadows ──
+  // Fake silhouette shadows appear ahead of the player
+  fakeShadows.forEach((shadow, i) => {
+    const dist = camera.position.distanceTo(shadow.position);
+    const look = new THREE.Vector3(); camera.getWorldDirection(look);
+    const toShadow = new THREE.Vector3().subVectors(shadow.position, camera.position).normalize();
+    const dot = look.dot(toShadow);
+
+    if (dist < 12 && dist > 3 && dot > 0.3 && mode.horrorEvents) {
+      // Fade in when approaching and looking toward it
+      shadow.visible = true;
+      shadow.material.opacity = Math.min(shadow.material.opacity + delta*0.5, 0.4);
+    } else if (dist < 3) {
+      // Vanish when you get close — it was never there
+      shadow.material.opacity -= delta*2;
+      if (shadow.material.opacity <= 0) {
+        shadow.visible = false;
+        // Reposition ahead of player for next scare
+        const ahead = new THREE.Vector3(); camera.getWorldDirection(ahead);
+        shadow.position.z = camera.position.z + ahead.z * (10+Math.random()*8);
+        shadow.position.z = Math.max(shadow.position.z, -SEGMENTS*5+5);
+        shadow.material.opacity = 0;
+      }
+    } else {
+      shadow.visible = false;
+      shadow.material.opacity = 0;
+    }
+  });
+
+  // ── Hallway Gets Longer (sanity < 40) ──
+  if (sanity < 40 && mode.horrorEvents) {
+    const stretch = (1 - sanity/40) * 0.04; // max 0.04 fog density increase
+    scriptedEvents.hallwayStretch = THREE.MathUtils.lerp(
+      scriptedEvents.hallwayStretch, stretch, delta * 0.5
+    );
+  } else {
+    scriptedEvents.hallwayStretch = THREE.MathUtils.lerp(scriptedEvents.hallwayStretch, 0, delta * 0.3);
+  }
+
   // ── Wall crawlers ──
   crawlerParticles.forEach(p=>{
     if(p.userData.active){
@@ -2509,7 +2699,7 @@ function animate() {
   }
 
   // ── Water ──
-  if(water){water.position.y=0.03+Math.sin(gameTime*0.5)*0.003;water.material.opacity=0.4+Math.sin(gameTime*0.3)*0.1;}
+  if(water && !scriptedEvents.apt104WaterRising){water.position.y=0.03+Math.sin(gameTime*0.5)*0.003;water.material.opacity=0.4+Math.sin(gameTime*0.3)*0.1;}
 
   // ── Interact prompt ──
   raycaster.setFromCamera(new THREE.Vector2(0,0),camera); raycaster.far=2.5;
