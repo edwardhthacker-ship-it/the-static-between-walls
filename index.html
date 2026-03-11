@@ -1090,11 +1090,51 @@ function addPipe(x1,y1,z1,x2,y2,z2,r=0.03) {
 }
 
 // ─── BUILD HALLWAY ───
+// Doorways: which segment/side has an opening, and at what z position
+const doorwayDefs = [
+  { seg: 1, side: 'right', doorZ: -3.5 },
+  { seg: 2, side: 'left',  doorZ: -8.5 },
+  { seg: 3, side: 'right', doorZ: -13.5 },
+  { seg: 4, side: 'left',  doorZ: -18.5 },
+  { seg: 5, side: 'right', doorZ: -23.5 },
+];
+const DOOR_GAP_W = 1.2; // doorway width in z
+const DOOR_GAP_H = 2.15; // doorway height
+
 for (let i = 0; i < SEGMENTS; i++) {
   const z = -i*5;
+  const segTop = z + 2.5; // more positive z edge
+  const segBot = z - 2.5; // more negative z edge
   addFloor(0,z,HALL_WIDTH,5); addCeiling(0,z,HALL_WIDTH,5);
-  addWall(-HALL_WIDTH/2, WH/2, z, 0.12, WH, 5, wallMatA);
-  addWall(HALL_WIDTH/2, WH/2, z, 0.12, WH, 5, wallMatA);
+
+  for (const side of ['left','right']) {
+    const x = side === 'right' ? HALL_WIDTH/2 : -HALL_WIDTH/2;
+    const dw = doorwayDefs.find(d => d.seg === i && d.side === side);
+
+    if (dw) {
+      const gapTop = dw.doorZ + DOOR_GAP_W/2;
+      const gapBot = dw.doorZ - DOOR_GAP_W/2;
+
+      // Wall piece above the doorway (lintel)
+      const aboveH = WH - DOOR_GAP_H;
+      if (aboveH > 0.05) {
+        addWall(x, DOOR_GAP_H + aboveH/2, dw.doorZ, 0.12, aboveH, DOOR_GAP_W, wallMatA);
+      }
+      // Wall from segment top edge to gap top edge
+      const topLen = segTop - gapTop;
+      if (topLen > 0.05) {
+        addWall(x, WH/2, gapTop + topLen/2, 0.12, WH, topLen, wallMatA);
+      }
+      // Wall from gap bottom edge to segment bottom edge
+      const botLen = gapBot - segBot;
+      if (botLen > 0.05) {
+        addWall(x, WH/2, segBot + botLen/2, 0.12, WH, botLen, wallMatA);
+      }
+    } else {
+      addWall(x, WH/2, z, 0.12, WH, 5, wallMatA);
+    }
+  }
+
   if (i > 0) addFluorescentLight(0, z, 1.8 + Math.random()*0.5);
 }
 addFluorescentLight(0, 0, 2.5);
