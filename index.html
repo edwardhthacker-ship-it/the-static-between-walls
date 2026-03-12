@@ -755,8 +755,7 @@ document.body.appendChild(renderer.domElement);
 // (avoids exceeding texture unit limits on constrained GPUs)
 
 const controls = new PointerLockControls(camera, renderer.domElement);
-controls.minPolarAngle = 0.3;  // can't look straight up
-controls.maxPolarAngle = 2.8;  // can't look straight down
+// PointerLockControls doesn't have polar angle limits — clamp pitch manually
 
 // ════════════════════════════════════════
 // TEXTURES
@@ -2215,6 +2214,10 @@ function animate() {
     if(!checkCollision(sz)) camera.position.copy(sz);
     camera.position.y = newPos.y;
   }
+
+  // ── Clamp camera pitch to prevent flipping ──
+  camera.rotation.x = Math.max(-Math.PI/2.2, Math.min(Math.PI/2.2, camera.rotation.x));
+  camera.rotation.z = Math.max(-0.05, Math.min(0.05, camera.rotation.z));
 
   // ── Head bob ──
   let bobRoll = 0;
