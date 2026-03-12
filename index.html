@@ -956,27 +956,33 @@ function addDoor(cz, side, open=false, locked=false) {
   const DW = 0.92, DH = 2.1;
   const g = new THREE.Group();
 
-  // Door panel — hinge at local x=0, panel extends +x
+  // Door panel sub-group — everything on the door goes here so it all rotates together
+  const doorPivot = new THREE.Group();
   const panel = new THREE.Mesh(new THREE.BoxGeometry(DW, DH, 0.05), doorMat);
-  panel.position.set(DW/2, DH/2, 0); g.add(panel);
+  panel.position.set(DW/2, DH/2, 0); doorPivot.add(panel);
 
-  // Panels on door for detail
+  // Recessed panels for detail
   const panelDetail = new THREE.MeshStandardMaterial({color:0x4a2e18, roughness:0.7});
   for (const py of [0.45, 1.2]) {
     const dp = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.35, 0.008), panelDetail);
-    dp.position.set(DW/2, py, 0.028); g.add(dp);
-    const dp2 = dp.clone(); dp2.position.z = -0.028; g.add(dp2);
+    dp.position.set(DW/2, py, 0.028); doorPivot.add(dp);
+    const dp2 = new THREE.Mesh(new THREE.BoxGeometry(0.65, 0.35, 0.008), panelDetail);
+    dp2.position.set(DW/2, py, -0.028); doorPivot.add(dp2);
   }
 
   // Handle + lock plate
   const handleMat = new THREE.MeshStandardMaterial({color:0xbb9944,metalness:0.9,roughness:0.15});
   const handleBase = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.1, 0.02), handleMat);
-  handleBase.position.set(DW-0.1, DH*0.48, 0.035); g.add(handleBase);
+  handleBase.position.set(DW-0.1, DH*0.48, 0.035); doorPivot.add(handleBase);
   const lever = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.02, 0.02), handleMat);
-  lever.position.set(DW-0.13, DH*0.48, 0.045); g.add(lever);
+  lever.position.set(DW-0.13, DH*0.48, 0.045); doorPivot.add(lever);
   // Back handle
-  const handleBase2 = handleBase.clone(); handleBase2.position.z = -0.035; g.add(handleBase2);
-  const lever2 = lever.clone(); lever2.position.z = -0.045; g.add(lever2);
+  const handleBase2 = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.1, 0.02), handleMat);
+  handleBase2.position.set(DW-0.1, DH*0.48, -0.035); doorPivot.add(handleBase2);
+  const lever2 = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.02, 0.02), handleMat);
+  lever2.position.set(DW-0.13, DH*0.48, -0.045); doorPivot.add(lever2);
+
+  g.add(doorPivot);
 
   // Position: hinge at one edge of doorway, panel fills the opening
   const wallX = side === 'right' ? HALL_WIDTH/2 : -HALL_WIDTH/2;
@@ -1004,7 +1010,7 @@ function addDoor(cz, side, open=false, locked=false) {
   header.position.set(wallX, DH + 0.04, cz); scene.add(header);
 
   const d = {
-    group:g, mesh:panel, isOpen:open, locked, type:'door',
+    group:g, mesh:doorPivot, isOpen:open, locked, type:'door',
     targetAngle: open?-Math.PI/2.5:0, currentAngle: open?-Math.PI/2.5:0,
     interact: () => {
       fourthWall.doorsOpened++;
@@ -1423,13 +1429,13 @@ interactables.push({
 // ════════════════════════════════════════
 // FLASHLIGHT
 // ════════════════════════════════════════
-const flashlight = new THREE.SpotLight(0xfff0dd, 28, 35, Math.PI/7, 0.5, 1.2);
+const flashlight = new THREE.SpotLight(0xfff0dd, 18, 30, Math.PI/7, 0.5, 1.4);
 flashlight.castShadow = false;
 camera.add(flashlight); camera.add(flashlight.target);
 flashlight.position.set(0.2,-0.1,-0.2);
 flashlight.target.position.set(0,0,-8);
 // Ambient fill so flashlight illuminates nearby area
-const flashFill = new THREE.PointLight(0xfff0dd, 2.0, 15);
+const flashFill = new THREE.PointLight(0xfff0dd, 1.0, 8);
 flashFill.position.set(0, 0, -0.5);
 camera.add(flashFill);
 
@@ -1443,7 +1449,7 @@ for (let i = 0; i < 5; i++) {
   geo.translate(0, -coneLength/2, 0);
   geo.rotateX(Math.PI/2);
   const mat = new THREE.MeshBasicMaterial({
-    color: 0xfff8e0, transparent: true, opacity: 0.07 - i * 0.01,
+    color: 0xfff8e0, transparent: true, opacity: 0.04 - i * 0.006,
     side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending
   });
   const mesh = new THREE.Mesh(geo, mat);
@@ -2699,7 +2705,7 @@ function animate() {
     pos.needsUpdate = true;
     // Beam opacity flickers slightly at low sanity
     // Beam flickers at low sanity
-    const beamOp = sNorm > 0.3 ? 0.07 : 0.04 + Math.random() * 0.04;
+    const beamOp = sNorm > 0.3 ? 0.04 : 0.025 + Math.random() * 0.025;
     coneGroup.children.forEach((c,i) => { c.material.opacity = beamOp - i * 0.01; });
   }
 
