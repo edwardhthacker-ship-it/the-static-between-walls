@@ -1181,7 +1181,9 @@ for (let i = 0; i < SEGMENTS; i++) {
   if (i > 0) addFluorescentLight(0, z, 1.8 + Math.random()*0.5);
 }
 addFluorescentLight(0, 0, 2.5);
-addWall(0, WH/2, -SEGMENTS*5+2.5, HALL_WIDTH, WH, 0.12);
+// End walls — leave 2.2 unit gap for corridor to basement
+addWall(-HALL_WIDTH/2+0.2, WH/2, -SEGMENTS*5+2.5, 0.4, WH, 0.12);
+addWall(HALL_WIDTH/2-0.2, WH/2, -SEGMENTS*5+2.5, 0.4, WH, 0.12);
 addPipe(-1.2, 2.85, -1, -1.2, 2.85, -SEGMENTS*5+3, 0.04);
 addPipe(1.1, 2.9, -2, 1.1, 2.9, -SEGMENTS*5+3, 0.02);
 
@@ -1297,7 +1299,7 @@ shelf.position.set(6.5, 0.9, -5.8); shelf.castShadow=true; scene.add(shelf); col
 buildApartment(-4.5, -9, 'left', wallMatC, floorMatWood, {open:true});
 addFluorescentLight(-4.5, -9, 1.5);
 const overChair = addChair(-3.5, -10); overChair.rotation.z = Math.PI/2; overChair.position.y = 0.2;
-addTable(-5.5, -8.5, 0.7, 0.4);
+addTable(-5.5, -8.5);
 addNote(-5.5, 0.76, -8.3, "TO ANYONE WHO FINDS THIS:\n\nDo NOT go to the basement. The radio signals — they're not signals. They're a voice. It calls itself 'The Tenant.'\n\nIt knows things about you. Things you haven't told anyone.\n\nLeave. NOW.", 0);
 const stain = new THREE.Mesh(new THREE.CircleGeometry(0.4,16), new THREE.MeshStandardMaterial({color:0x220800,roughness:1,transparent:true,opacity:0.6}));
 stain.rotation.x=-Math.PI/2; stain.position.set(-4, 0.005, -9.5); scene.add(stain);
@@ -1347,6 +1349,9 @@ addWall(-4.5, WH/2, -32, 6, WH, 0.12, wallMatC);
 addWall(-4.5, WH/2, -27, 6, WH, 0.12, wallMatC);
 addWall(-7.5, WH/2, -29.5, 0.12, WH, 5, wallMatC);
 addFloor(-4.5, -29.5, 6, 5, floorMatConcrete); addCeiling(-4.5, -29.5, 6, 5);
+// Dim red light inside mystery room
+const mysteryLight = new THREE.PointLight(0xff2200, 0.4, 5, 2);
+mysteryLight.position.set(-5, 2.5, -29.5); scene.add(mysteryLight);
 
 // Small lights above each doorway so they're visible
 [{x:1.3,z:-3.5},{x:-1.3,z:-8.5},{x:1.3,z:-13.5},{x:-1.3,z:-18.5},{x:1.3,z:-23.5},{x:-1.3,z:-29.5}].forEach(d => {
@@ -1512,6 +1517,7 @@ const scriptedEvents = {
   loopTriggerZ: -SEGMENTS*5 + 4, // near the end of the hallway
   loopResetZ: 1, // back to start
   loopCooldown: false,
+  loopChairAdded: false,
   // Hallway stretching (sanity < 40)
   hallwayStretch: 0,
 };
@@ -1623,7 +1629,7 @@ let glitchTimer=0, glitchIntensity=0;
 let gameTime=0, heartbeatTimer=0, breathTimer=0;
 let nextEventTime = 20;
 let inDarkness = 0;
-let prevYaw = 0;
+let prevCamZ = 1; // for loop direction detection
 const direction = new THREE.Vector3();
 const raycaster = new THREE.Raycaster();
 
@@ -2082,11 +2088,12 @@ document.addEventListener('keydown', (e) => {
       if(radioActive){playStaticBurst(0.2,0.08);showSubtitle("Radio scanner active");}
       break;
     case 'KeyE': tryInteract(); break;
-    case 'KeyV':
+    case 'KeyV': {
       const volCtrl = document.getElementById('volume-control');
       volCtrl.style.display = volCtrl.style.display === 'block' ? 'none' : 'block';
       volCtrl.style.pointerEvents = 'auto';
       break;
+    }
   }
 });
 
@@ -2204,11 +2211,12 @@ function animate() {
   }
 
   // ── Head bob ──
+  let bobRoll = 0;
   if(isMoving) {
     bobPhase += delta*(isSprinting?14:8);
     bobIntensity = THREE.MathUtils.lerp(bobIntensity,1,delta*5);
     camera.position.y += Math.sin(bobPhase)*0.012*bobIntensity;
-    camera.rotation.z = Math.sin(bobPhase*0.5)*0.003*bobIntensity;
+    bobRoll = Math.sin(bobPhase*0.5)*0.003*bobIntensity;
     stepTimer += delta;
     if(stepTimer > (isSprinting?0.32:0.5)) {
       playFootstep(camera.position.z<stairEnd?'concrete':'tile', isSprinting?0.12:0.07);
@@ -2216,7 +2224,6 @@ function animate() {
     }
   } else {
     bobIntensity = THREE.MathUtils.lerp(bobIntensity,0,delta*3);
-    camera.rotation.z = THREE.MathUtils.lerp(camera.rotation.z,0,delta*5);
   }
 
   // ── FOURTH WALL: Hiding detection ──
@@ -2300,12 +2307,13 @@ function animate() {
   sanity = Math.max(0, Math.min(100, sanity+delta*mode.sanityRecovery));
   const sN = sanity/100;
   sanityOverlay.style.opacity = (1-sN)*0.6;
-  // Sanity shake — set (not accumulate) small random offset, damped by lerp
-  if(sanity<50) {
-    const shake=(1-sanity/50)*0.003;
-    camera.rotation.z = THREE.MathUtils.lerp(camera.rotation.z, (Math.random()-0.5)*shake, delta*8);
-  } else {
-    camera.rotation.z = THREE.MathUtils.lerp(camera.rotation.z, 0, delta*5);
+  // Combined camera roll: head bob + sanity shake
+  {
+    let shakeRoll = 0;
+    if(sanity<50) {
+      shakeRoll = (Math.random()-0.5)*(1-sanity/50)*0.003;
+    }
+    camera.rotation.z = THREE.MathUtils.lerp(camera.rotation.z, bobRoll + shakeRoll, delta*8);
   }
 
   breathTimer+=delta;
@@ -2372,8 +2380,11 @@ function animate() {
     if(watcherTimer<=0) {
       watcherState='appearing'; watcherGroup.visible=true; watcherOpacity=0;
       const behind=new THREE.Vector3(); camera.getWorldDirection(behind); behind.multiplyScalar(-12);
-      watcherGroup.position.set(camera.position.x+behind.x+(Math.random()-0.5)*3,
-        camera.position.y-1.65, camera.position.z+behind.z);
+      const wY = camera.position.y > 0 ? 0 : camera.position.y - 1.65;
+      const wZ = Math.max(-SEGMENTS*5+3, Math.min(2, camera.position.z+behind.z));
+      watcherGroup.position.set(
+        Math.max(-HALL_WIDTH/2, Math.min(HALL_WIDTH/2, camera.position.x+behind.x+(Math.random()-0.5)*3)),
+        wY, wZ);
     }
   } else if(watcherState==='appearing') {
     watcherOpacity=Math.min(watcherOpacity+delta*0.3,0.7);
@@ -2410,11 +2421,13 @@ function animate() {
         // Place it ahead of the player, at the edge of visibility
         const ahead = new THREE.Vector3(); camera.getWorldDirection(ahead); ahead.multiplyScalar(8+Math.random()*5);
         const side = Math.random()>0.5 ? 1 : -1;
+        const glimpseBaseY = camera.position.y > 0 ? 0 : camera.position.y - 1.65;
         glimpseGroup.position.set(
           Math.max(-1.2, Math.min(1.2, camera.position.x + ahead.x + side*1.5)),
-          camera.position.y - 1.65,
-          camera.position.z + ahead.z
+          glimpseBaseY,
+          Math.max(-SEGMENTS*5+3, Math.min(2, camera.position.z + ahead.z))
         );
+        glimpseGroup.userData.baseY = glimpseBaseY;
       }
     } else if (glimpseState === 'lurking') {
       glimpseMat.opacity = Math.min(glimpseMat.opacity + delta*0.5, 0.6);
@@ -2435,11 +2448,11 @@ function animate() {
         });
         if(nearestFL && nearestDist < 8) {
           nearestFL.broken = true; nearestFL.light.intensity = 0;
-          nearestFL.glow.material.opacity = 0;
+          if(nearestFL.glow) nearestFL.glow.material.opacity = 0;
         }
       }
-      // Subtle idle sway + twitching
-      glimpseGroup.position.y += Math.sin(gameTime*2)*delta*0.1;
+      // Subtle idle sway + twitching (absolute, not additive)
+      glimpseGroup.position.y = (glimpseGroup.userData.baseY||0) + Math.sin(gameTime*2)*0.05;
       if(Math.random() < 0.02) {
         glimpseGroup.position.x += (Math.random()-0.5)*0.3;
       }
@@ -2487,12 +2500,13 @@ function animate() {
         flickerLights.forEach(fl => {
           if(fl.light.position.distanceTo(new THREE.Vector3(-4.5, 2.85, -9)) < 4) {
             const origInt = fl.baseIntensity;
-            fl.light.intensity = 0; fl.glow.material.opacity = 0;
-            setTimeout(() => { fl.light.intensity = origInt*3; fl.glow.material.opacity = 0.3; }, 200);
-            setTimeout(() => { fl.light.intensity = 0; fl.glow.material.opacity = 0; }, 400);
-            setTimeout(() => { fl.light.intensity = origInt*2; fl.glow.material.opacity = 0.2; }, 700);
-            setTimeout(() => { fl.light.intensity = 0; fl.glow.material.opacity = 0; }, 900);
-            setTimeout(() => { fl.light.intensity = origInt; fl.glow.material.opacity = 0.15; }, 1500);
+            const g = fl.glow;
+            fl.light.intensity = 0; if(g) g.material.opacity = 0;
+            setTimeout(() => { fl.light.intensity = origInt*3; if(g) g.material.opacity = 0.3; }, 200);
+            setTimeout(() => { fl.light.intensity = 0; if(g) g.material.opacity = 0; }, 400);
+            setTimeout(() => { fl.light.intensity = origInt*2; if(g) g.material.opacity = 0.2; }, 700);
+            setTimeout(() => { fl.light.intensity = 0; if(g) g.material.opacity = 0; }, 900);
+            setTimeout(() => { fl.light.intensity = origInt; if(g) g.material.opacity = 0.15; }, 1500);
           }
         });
         playStaticBurst(0.3, 0.15);
@@ -2570,10 +2584,11 @@ function animate() {
   }
 
   // ── Looping Hallway ──
-  // When player reaches end of hallway, silently teleport back to start
-  // Each loop something is different
-  if (mode.horrorEvents && !scriptedEvents.loopCooldown) {
-    if (camera.position.z < scriptedEvents.loopTriggerZ && camera.position.y > 0) {
+  // Direction-crossing detection: only fires when newly crossing threshold moving forward
+  // Caps at 4 loops, then player can proceed to basement
+  if (mode.horrorEvents && !scriptedEvents.loopCooldown && scriptedEvents.loopCount < 4) {
+    const crossedThreshold = prevCamZ >= scriptedEvents.loopTriggerZ && camera.position.z < scriptedEvents.loopTriggerZ;
+    if (crossedThreshold && camera.position.y > 0) {
       scriptedEvents.loopCooldown = true;
       scriptedEvents.loopCount++;
       const loop = scriptedEvents.loopCount;
@@ -2582,50 +2597,40 @@ function animate() {
       triggerGlitch(0.3, 0.2);
       camera.position.z = scriptedEvents.loopResetZ;
 
-      // Each loop, something changes
       if (loop === 1) {
-        // A closed door is now open
         if (doorObjects[0] && !doorObjects[0].isOpen) {
           doorObjects[0].isOpen = true; doorObjects[0].targetAngle = -Math.PI/3;
         }
         showSubtitle("...didn't I just walk this way?");
       } else if (loop === 2) {
-        // A note has moved — show a new note in the middle of the hallway
         if (typeof addNote === 'function') {
-          addNote(0.3, 0.01, -5, "YOU KEEP WALKING.\n\nIT KEEPS GOING.\n\nI KEEP WATCHING.", 0);
+          addNote(0.3, 1.2, -5, "YOU KEEP WALKING.\n\nIT KEEPS GOING.\n\nI KEEP WATCHING.", 0);
         }
         playWhisper();
-      } else if (loop >= 3) {
-        // Things get wrong — swap door numbers, add a chair that wasn't there
-        const wrongChair = new THREE.Mesh(
-          new THREE.BoxGeometry(0.4, 0.4, 0.4),
-          new THREE.MeshStandardMaterial({color:0x2a1a0c,roughness:0.8})
-        );
-        wrongChair.position.set(
-          (Math.random()-0.5)*1.5,
-          0.2,
-          -2 - Math.random()*10
-        );
-        scene.add(wrongChair); colliders.push(wrongChair);
-
-        // Corrupt door numbers
-        const wrongNums = ['10?','1̷0̷1','---','R̵U̵N','105','101','???'];
-        document.querySelectorAll('.door-num-override').forEach(el => el.remove());
-
-        if (loop === 3) {
-          showSubtitle("The numbers are wrong.");
-          sanity -= 8;
-          playTenantVoice("You noticed.\nMost don't.\nMost don't get a third walk.");
-        } else if (loop >= 4) {
-          showSubtitle("Stop walking.");
-          sanity -= 12;
-          triggerGlitch(2, 1.5);
+      } else if (loop === 3) {
+        // Add ONE wrong chair (not on every loop)
+        if (!scriptedEvents.loopChairAdded) {
+          scriptedEvents.loopChairAdded = true;
+          const wrongChair = new THREE.Mesh(
+            new THREE.BoxGeometry(0.4, 0.4, 0.4),
+            new THREE.MeshStandardMaterial({color:0x2a1a0c,roughness:0.8})
+          );
+          wrongChair.position.set((Math.random()-0.5)*1.5, 0.2, -2-Math.random()*10);
+          scene.add(wrongChair); colliders.push(wrongChair);
         }
+        showSubtitle("The numbers are wrong.");
+        sanity -= 8;
+        playTenantVoice("You noticed.\nMost don't.\nMost don't get a third walk.");
+      } else if (loop === 4) {
+        showSubtitle("Stop walking.");
+        sanity -= 12;
+        triggerGlitch(2, 1.5);
       }
 
       setTimeout(() => { scriptedEvents.loopCooldown = false; }, 3000);
     }
   }
+  prevCamZ = camera.position.z;
 
   // ── Sourceless Shadows ──
   // Fake silhouette shadows appear ahead of the player
